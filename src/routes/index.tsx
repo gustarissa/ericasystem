@@ -95,6 +95,7 @@ function Index() {
 
   if (loading) return <div className="grid min-h-screen place-items-center"><LoaderCircle className="size-7 animate-spin text-primary" /></div>;
   if (!userId) return <AuthScreen mode={authMode} setMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} error={authError} onSubmit={handleAuth} />;
+  const currentUserId = userId;
 
   async function saveTransaction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,17 +104,17 @@ function Index() {
     const categoryName = String(form.get("category")).trim();
     let category = categories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase() && c.type === type);
     if (!category) {
-      const { data, error } = await supabase.from("categories").insert({ user_id: userId, name: categoryName, type, color: type === "income" ? "green" : "blue", icon: "tag" }).select("id,name,type,color,icon").single();
+      const { data, error } = await supabase.from("categories").insert({ user_id: currentUserId, name: categoryName, type, color: type === "income" ? "green" : "blue", icon: "tag" }).select("id,name,type,color,icon").single();
       if (error || !data) { setNotice(error?.message ?? "Não foi possível criar a categoria."); return; }
       category = data as Category;
     }
-    const { error } = await supabase.from("transactions").insert({ user_id: userId, category_id: category.id, description: String(form.get("description")), amount: Number(form.get("amount")), type, transaction_date: String(form.get("date")), reconciled: false });
-    if (error) setNotice(error.message); else { setDialogOpen(false); setNotice("Lançamento adicionado."); await loadData(userId); }
+    const { error } = await supabase.from("transactions").insert({ user_id: currentUserId, category_id: category.id, description: String(form.get("description")), amount: Number(form.get("amount")), type, transaction_date: String(form.get("date")), reconciled: false });
+    if (error) setNotice(error.message); else { setDialogOpen(false); setNotice("Lançamento adicionado."); await loadData(currentUserId); }
   }
 
   async function reconcile(id: string) {
     const { error } = await supabase.from("transactions").update({ reconciled: true }).eq("id", id);
-    if (error) setNotice(error.message); else { setNotice("Gasto conciliado."); await loadData(userId); }
+    if (error) setNotice(error.message); else { setNotice("Gasto conciliado."); await loadData(currentUserId); }
   }
 
   async function askAI() {
