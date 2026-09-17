@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      card_purchases: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string
+          id: string
+          purchase_date: string
+          transaction_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description: string
+          id?: string
+          purchase_date?: string
+          transaction_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string
+          id?: string
+          purchase_date?: string
+          transaction_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_purchases_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           color: string
@@ -50,10 +91,12 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          card_name: string | null
           category_id: string | null
           created_at: string
           description: string
           id: string
+          is_card_invoice: boolean
           notes: string | null
           reconciled: boolean
           transaction_date: string
@@ -63,10 +106,12 @@ export type Database = {
         }
         Insert: {
           amount: number
+          card_name?: string | null
           category_id?: string | null
           created_at?: string
           description: string
           id?: string
+          is_card_invoice?: boolean
           notes?: string | null
           reconciled?: boolean
           transaction_date?: string
@@ -76,10 +121,12 @@ export type Database = {
         }
         Update: {
           amount?: number
+          card_name?: string | null
           category_id?: string | null
           created_at?: string
           description?: string
           id?: string
+          is_card_invoice?: boolean
           notes?: string | null
           reconciled?: boolean
           transaction_date?: string
