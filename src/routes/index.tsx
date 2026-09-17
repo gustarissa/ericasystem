@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, LoaderCircle, LogOut, Menu, Plus, Sparkles, WalletCards, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CreditCard, LoaderCircle, LogOut, Menu, Plus, ReceiptText, Sparkles, Trash2, WalletCards, X } from "lucide-react";
 
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-type Tx = { id: string; description: string; amount: number; type: "income" | "expense"; transaction_date: string; reconciled: boolean; category_id: string | null };
+type Tx = { id: string; description: string; amount: number; type: "income" | "expense"; transaction_date: string; reconciled: boolean; category_id: string | null; is_card_invoice: boolean; card_name: string | null };
 type Category = { id: string; name: string; type: "income" | "expense"; color: string; icon: string };
+type CardPurchase = { id: string; transaction_id: string; description: string; amount: number; purchase_date: string };
+type DraftPurchase = { id: string; description: string; amount: string; purchaseDate: string };
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [
@@ -38,8 +40,10 @@ function Index() {
   const [password, setPassword] = useState("");
   const [transactions, setTransactions] = useState<Tx[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [cardPurchases, setCardPurchases] = useState<CardPurchase[]>([]);
   const [month, setMonth] = useState(() => new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [invoiceDetail, setInvoiceDetail] = useState<Tx | null>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [notice, setNotice] = useState("");
   const [insight, setInsight] = useState("");
@@ -47,12 +51,14 @@ function Index() {
   const runInsight = useServerFn(generateFinancialInsight);
 
   async function loadData(id: string) {
-    const [{ data: tx }, { data: cats }] = await Promise.all([
-      supabase.from("transactions").select("id,description,amount,type,transaction_date,reconciled,category_id").eq("user_id", id).order("transaction_date", { ascending: false }),
+    const [{ data: tx }, { data: cats }, { data: purchases }] = await Promise.all([
+      supabase.from("transactions").select("id,description,amount,type,transaction_date,reconciled,category_id,is_card_invoice,card_name").eq("user_id", id).order("transaction_date", { ascending: false }),
       supabase.from("categories").select("id,name,type,color,icon").eq("user_id", id).order("name"),
+      supabase.from("card_purchases").select("id,transaction_id,description,amount,purchase_date").eq("user_id", id).order("purchase_date", { ascending: false }),
     ]);
     setTransactions((tx ?? []) as Tx[]);
     setCategories((cats ?? []) as Category[]);
+    setCardPurchases((purchases ?? []) as CardPurchase[]);
   }
 
   useEffect(() => {
@@ -66,7 +72,7 @@ function Index() {
       if (!["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) return;
       const id = session?.user.id ?? null;
       setUserId(id);
-      if (id) void loadData(id); else { setTransactions([]); setCategories([]); }
+      if (id) void loadData(id); else { setTransactions([]); setCategories([]); setCardPurchases([]); }
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -97,10 +103,12 @@ function Index() {
   if (!userId) return <AuthScreen mode={authMode} setMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} error={authError} onSubmit={handleAuth} />;
   const currentUserId = userId;
 
-  async function saveTransaction(event: FormEvent<HTMLFormElement>) {
+  async function saveTransaction(event: FormEvent<HTMLFormElement>, purchases: DraftPurchase[]) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const type = String(form.get("type")) as "income" | "expense";
+    const selectedType = String(form.get("type"));
+    const isCardInvoice = selectedType === "card";
+    const type = (isCardInvoice ? "expense" : selectedType) as "income" | "expense";
     const categoryName = String(form.get("category")).trim();
     let category = categories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase() && c.type === type);
     if (!category) {
@@ -108,8 +116,20 @@ function Index() {
       if (error || !data) { setNotice(error?.message ?? "Não foi possível criar a categoria."); return; }
       category = data as Category;
     }
-    const { error } = await supabase.from("transactions").insert({ user_id: currentUserId, category_id: category.id, description: String(form.get("description")), amount: Number(form.get("amount")), type, transaction_date: String(form.get("date")), reconciled: false });
-    if (error) setNotice(error.message); else { setDialogOpen(false); setNotice("Lançamento adicionado."); await loadData(currentUserId); }
+    const invoiceAmount = Number(form.get("amount"));
+    const validPurchases = purchases.filter((purchase) => purchase.description.trim() && Number(purchase.amount) > 0);
+    if (isCardInvoice && validPurchases.length === 0) { setNotice("Adicione pelo menos uma compra à fatura."); return; }
+    const { data: transaction, error } = await supabase.from("transactions").insert({ user_id: currentUserId, category_id: category.id, description: isCardInvoice ? `Fatura ${String(form.get("cardName")).trim()}` : String(form.get("description")), amount: invoiceAmount, type, transaction_date: String(form.get("date")), reconciled: false, is_card_invoice: isCardInvoice, card_name: isCardInvoice ? String(form.get("cardName")).trim() : null }).select("id").single();
+    if (error || !transaction) { setNotice(error?.message ?? "Não foi possível salvar o lançamento."); return; }
+    if (isCardInvoice) {
+      const { error: purchaseError } = await supabase.from("card_purchases").insert(validPurchases.map((purchase) => ({ transaction_id: transaction.id, user_id: currentUserId, description: purchase.description.trim(), amount: Number(purchase.amount), purchase_date: purchase.purchaseDate })));
+      if (purchaseError) {
+        await supabase.from("transactions").delete().eq("id", transaction.id);
+        setNotice("Não foi possível salvar as compras. A fatura não foi cadastrada.");
+        return;
+      }
+    }
+    setDialogOpen(false); setNotice(isCardInvoice ? "Fatura e compras adicionadas." : "Lançamento adicionado."); await loadData(currentUserId);
   }
 
   async function reconcile(id: string) {
@@ -149,12 +169,13 @@ function Index() {
           </div>
         </section>
 
-        <section id="movimentos" className="mt-6 scroll-mt-28 rounded-3xl border border-glass-border bg-glass p-4 shadow-glass backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-bold">Movimentos recentes</h2><p className="text-xs text-muted-foreground">Entradas e saídas organizadas por categoria</p></div><Button variant="glass" className="rounded-xl" onClick={() => setDialogOpen(true)}><Plus />Adicionar</Button></div><div className="mt-5 divide-y divide-border">{monthTransactions.length ? monthTransactions.slice(0,10).map((t) => { const cat = categories.find((c) => c.id === t.category_id); return <div key={t.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-3 sm:grid-cols-[auto_1fr_auto_auto]"><span className={`grid size-9 place-items-center rounded-xl ${t.type === 'income' ? 'bg-income/10 text-income' : 'bg-expense/10 text-expense'}`}>{t.type === 'income' ? <ArrowUp /> : <ArrowDown />}</span><div className="min-w-0"><p className="truncate text-sm font-semibold">{t.description}</p><p className="text-xs text-muted-foreground">{cat?.name ?? 'Sem categoria'} · {new Intl.DateTimeFormat('pt-BR').format(new Date(`${t.transaction_date}T12:00:00`))}</p></div><span className={`font-display text-sm font-bold ${t.type === 'income' ? 'text-income' : 'text-expense'}`}>{t.type === 'income' ? '+' : '-'} {money.format(Number(t.amount))}</span><span className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold sm:block ${t.reconciled ? 'bg-income/10 text-income' : 'bg-warning/15 text-foreground'}`}>{t.reconciled ? 'Conciliado' : 'Pendente'}</span></div>}) : <EmptyState onAdd={() => setDialogOpen(true)} />}</div></section>
+        <section id="movimentos" className="mt-6 scroll-mt-28 rounded-3xl border border-glass-border bg-glass p-4 shadow-glass backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-bold">Movimentos recentes</h2><p className="text-xs text-muted-foreground">Entradas, saídas e faturas organizadas por categoria</p></div><Button variant="glass" className="rounded-xl" onClick={() => setDialogOpen(true)}><Plus />Adicionar</Button></div><div className="mt-5 divide-y divide-border">{monthTransactions.length ? monthTransactions.slice(0,10).map((t) => { const cat = categories.find((c) => c.id === t.category_id); return <div key={t.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-3 sm:grid-cols-[auto_1fr_auto_auto]"><span className={`grid size-9 place-items-center rounded-xl ${t.type === 'income' ? 'bg-income/10 text-income' : 'bg-expense/10 text-expense'}`}>{t.is_card_invoice ? <CreditCard /> : t.type === 'income' ? <ArrowUp /> : <ArrowDown />}</span><div className="min-w-0"><p className="truncate text-sm font-semibold">{t.description}</p><div className="flex flex-wrap items-center gap-2"><p className="text-xs text-muted-foreground">{cat?.name ?? 'Sem categoria'} · {new Intl.DateTimeFormat('pt-BR').format(new Date(`${t.transaction_date}T12:00:00`))}</p>{t.is_card_invoice && <Button type="button" variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-[11px] text-primary" onClick={() => setInvoiceDetail(t)}><ReceiptText className="size-3"/>Ver compras</Button>}</div></div><span className={`font-display text-sm font-bold ${t.type === 'income' ? 'text-income' : 'text-expense'}`}>{t.type === 'income' ? '+' : '-'} {money.format(Number(t.amount))}</span><span className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold sm:block ${t.reconciled ? 'bg-income/10 text-income' : 'bg-warning/15 text-foreground'}`}>{t.reconciled ? 'Conciliado' : 'Pendente'}</span></div>}) : <EmptyState onAdd={() => setDialogOpen(true)} />}</div></section>
 
         <section id="conciliacao" className="my-6 scroll-mt-28 rounded-3xl border border-glass-border bg-glass p-4 shadow-glass backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-bold">Conciliação</h2><p className="text-xs text-muted-foreground">Confirme os gastos que já conferiu no extrato</p></div><span className="rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold">{monthTransactions.filter((t) => !t.reconciled).length} pendentes</span></div><div className="mt-4 grid gap-3 md:grid-cols-2">{monthTransactions.filter((t) => !t.reconciled).map((t) => <div key={t.id} className="flex items-center gap-3 rounded-2xl border border-glass-border bg-glass-strong p-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{t.description}</p><p className="text-xs text-muted-foreground">{money.format(Number(t.amount))}</p></div><Button variant="glass" size="sm" className="rounded-xl" onClick={() => reconcile(t.id)}><Check />Conciliar</Button></div>)}</div></section>
       </div>
       {notice && <div role="status" className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-foreground px-4 py-3 text-sm text-background shadow-brand">{notice}<button className="ml-4" onClick={() => setNotice("")} aria-label="Fechar aviso">×</button></div>}
       <TransactionDialog open={dialogOpen} setOpen={setDialogOpen} onSave={saveTransaction} />
+      <InvoiceDetailDialog invoice={invoiceDetail} purchases={cardPurchases.filter((purchase) => purchase.transaction_id === invoiceDetail?.id)} onClose={() => setInvoiceDetail(null)} />
     </main>
   );
 }
@@ -168,7 +189,20 @@ function AuthScreen({ mode, setMode, email, setEmail, password, setPassword, err
   return <main className="grid min-h-screen place-items-center px-4"><section className="w-full max-w-md rounded-3xl border border-glass-border bg-glass p-7 shadow-glass backdrop-blur-xl"><div className="mb-7 flex items-center gap-3"><Logo/><div><h1 className="font-display text-2xl font-bold">ESF</h1><p className="text-sm text-muted-foreground">Seu dinheiro com mais clareza.</p></div></div><div className="mb-5 grid grid-cols-2 rounded-xl bg-glass p-1"><button className={`rounded-lg py-2 text-sm font-semibold ${mode === 'login' ? 'bg-glass-strong shadow-sm' : 'text-muted-foreground'}`} onClick={() => setMode('login')}>Entrar</button><button className={`rounded-lg py-2 text-sm font-semibold ${mode === 'signup' ? 'bg-glass-strong shadow-sm' : 'text-muted-foreground'}`} onClick={() => setMode('signup')}>Criar conta</button></div><form className="space-y-3" onSubmit={onSubmit}><Input type="email" required placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 rounded-xl bg-glass-strong"/><Input type="password" required minLength={6} placeholder="Sua senha" value={password} onChange={(e) => setPassword(e.target.value)} className="h-11 rounded-xl bg-glass-strong"/><Button variant="hero" className="h-12 w-full rounded-xl text-base font-bold text-secondary-foreground shadow-brand ring-1 ring-foreground/10">{mode === 'login' ? 'Entrar no ESF' : 'Criar minha conta'}</Button></form><div className="my-4 flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border"/>ou<span className="h-px flex-1 bg-border"/></div><Button variant="glass" className="h-11 w-full rounded-xl" onClick={google}>Continuar com Google</Button>{error && <p className="mt-4 rounded-xl bg-expense/10 p-3 text-sm text-expense">{error}</p>}</section></main>;
 }
 
-function TransactionDialog({ open, setOpen, onSave }: { open: boolean; setOpen: (v: boolean) => void; onSave: (e: FormEvent<HTMLFormElement>) => void }) {
+function TransactionDialog({ open, setOpen, onSave }: { open: boolean; setOpen: (v: boolean) => void; onSave: (e: FormEvent<HTMLFormElement>, purchases: DraftPurchase[]) => void }) {
   const today = new Date().toISOString().slice(0,10);
-  return <Dialog open={open} onOpenChange={setOpen}><DialogContent className="rounded-3xl border-glass-border bg-glass-strong backdrop-blur-xl"><DialogHeader><DialogTitle className="font-display text-2xl">Novo lançamento</DialogTitle><DialogDescription>Registre uma entrada ou saída e organize por categoria.</DialogDescription></DialogHeader><form onSubmit={onSave} className="grid gap-4"><label className="grid gap-1.5 text-sm font-medium">Tipo<select name="type" className="h-10 rounded-xl border border-input bg-background px-3"><option value="expense">Despesa</option><option value="income">Entrada</option></select></label><label className="grid gap-1.5 text-sm font-medium">Descrição<Input name="description" required maxLength={120} placeholder="Ex.: Supermercado" className="h-10 rounded-xl"/></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-sm font-medium">Valor<Input name="amount" required type="number" min="0.01" step="0.01" placeholder="0,00" className="h-10 rounded-xl"/></label><label className="grid gap-1.5 text-sm font-medium">Data<Input name="date" required type="date" defaultValue={today} className="h-10 rounded-xl"/></label></div><label className="grid gap-1.5 text-sm font-medium">Categoria<Input name="category" required maxLength={60} placeholder="Ex.: Moradia" className="h-10 rounded-xl"/></label><Button variant="hero" className="mt-2 h-11 rounded-xl"><Plus />Salvar lançamento</Button></form></DialogContent></Dialog>;
+  const [type, setType] = useState("expense");
+  const [invoiceAmount, setInvoiceAmount] = useState("");
+  const [purchases, setPurchases] = useState<DraftPurchase[]>([]);
+  const purchaseTotal = purchases.reduce((sum, purchase) => sum + (Number(purchase.amount) || 0), 0);
+  const difference = (Number(invoiceAmount) || 0) - purchaseTotal;
+  function addPurchase() { setPurchases((current) => [...current, { id: crypto.randomUUID(), description: "", amount: "", purchaseDate: today }]); }
+  function close(nextOpen: boolean) { setOpen(nextOpen); if (!nextOpen) { setType("expense"); setInvoiceAmount(""); setPurchases([]); } }
+  return <Dialog open={open} onOpenChange={close}><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl border-glass-border bg-glass-strong backdrop-blur-xl sm:max-w-2xl"><DialogHeader><DialogTitle className="font-display text-2xl">Novo lançamento</DialogTitle><DialogDescription>Registre uma entrada, despesa ou fatura de cartão.</DialogDescription></DialogHeader><form onSubmit={(event) => onSave(event, purchases)} className="grid gap-4"><label className="grid gap-1.5 text-sm font-medium">Tipo<select name="type" value={type} onChange={(event) => setType(event.target.value)} className="h-10 rounded-xl border border-input bg-background px-3"><option value="expense">Despesa</option><option value="income">Entrada</option><option value="card">Fatura de cartão</option></select></label>{type === "card" ? <><label className="grid gap-1.5 text-sm font-medium">Cartão<Input name="cardName" required maxLength={60} placeholder="Ex.: Nubank final 1234" className="h-10 rounded-xl"/></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-sm font-medium">Valor da fatura<Input name="amount" value={invoiceAmount} onChange={(event) => setInvoiceAmount(event.target.value)} required type="number" min="0.01" step="0.01" placeholder="0,00" className="h-10 rounded-xl"/></label><label className="grid gap-1.5 text-sm font-medium">Vencimento<Input name="date" required type="date" defaultValue={today} className="h-10 rounded-xl"/></label></div><input type="hidden" name="description" value="Fatura de cartão"/><div className="rounded-2xl border border-glass-border bg-glass p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Compras da fatura</p><p className="text-xs text-muted-foreground">Adicione cada gasto cobrado no cartão.</p></div><Button type="button" variant="glass" size="sm" className="rounded-xl" onClick={addPurchase}><Plus/>Compra</Button></div><div className="mt-4 grid gap-3">{purchases.length === 0 && <p className="rounded-xl bg-glass-strong p-4 text-center text-sm text-muted-foreground">Nenhuma compra adicionada.</p>}{purchases.map((purchase, index) => <div key={purchase.id} className="grid gap-2 rounded-xl border border-glass-border p-3 sm:grid-cols-[1fr_130px_145px_36px]"><Input aria-label={`Descrição da compra ${index + 1}`} value={purchase.description} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, description: event.target.value } : item))} required placeholder="Descrição" className="h-9 rounded-lg"/><Input aria-label={`Valor da compra ${index + 1}`} value={purchase.amount} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, amount: event.target.value } : item))} required type="number" min="0.01" step="0.01" placeholder="Valor" className="h-9 rounded-lg"/><Input aria-label={`Data da compra ${index + 1}`} value={purchase.purchaseDate} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, purchaseDate: event.target.value } : item))} required type="date" className="h-9 rounded-lg"/><Button type="button" variant="ghost" size="icon" className="size-9 text-expense" aria-label={`Remover compra ${index + 1}`} onClick={() => setPurchases((current) => current.filter((item) => item.id !== purchase.id))}><Trash2/></Button></div>)}</div><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-glass-strong p-3"><p className="text-xs text-muted-foreground">Soma das compras</p><p className="font-display text-lg font-bold">{money.format(purchaseTotal)}</p></div><div className={`rounded-xl p-3 ${Math.abs(difference) < 0.005 && Number(invoiceAmount) > 0 ? 'bg-income/10 text-income' : 'bg-warning/15'}`}><p className="text-xs">{Math.abs(difference) < 0.005 && Number(invoiceAmount) > 0 ? 'Fatura conferida' : 'Diferença'}</p><p className="font-display text-lg font-bold">{money.format(Math.abs(difference))}</p></div></div></div></> : <><label className="grid gap-1.5 text-sm font-medium">Descrição<Input name="description" required maxLength={120} placeholder="Ex.: Supermercado" className="h-10 rounded-xl"/></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-sm font-medium">Valor<Input name="amount" required type="number" min="0.01" step="0.01" placeholder="0,00" className="h-10 rounded-xl"/></label><label className="grid gap-1.5 text-sm font-medium">Data<Input name="date" required type="date" defaultValue={today} className="h-10 rounded-xl"/></label></div></>}<label className="grid gap-1.5 text-sm font-medium">Categoria<Input name="category" required maxLength={60} placeholder={type === 'card' ? 'Ex.: Cartão de crédito' : 'Ex.: Moradia'} className="h-10 rounded-xl"/></label><Button variant="hero" className="mt-2 h-11 rounded-xl"><Plus />{type === 'card' ? 'Salvar fatura' : 'Salvar lançamento'}</Button></form></DialogContent></Dialog>;
+}
+
+function InvoiceDetailDialog({ invoice, purchases, onClose }: { invoice: Tx | null; purchases: CardPurchase[]; onClose: () => void }) {
+  const total = purchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
+  const difference = Number(invoice?.amount ?? 0) - total;
+  return <Dialog open={Boolean(invoice)} onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className="max-h-[88vh] overflow-y-auto rounded-3xl border-glass-border bg-glass-strong backdrop-blur-xl sm:max-w-xl"><DialogHeader><DialogTitle className="flex items-center gap-2 font-display text-2xl"><CreditCard className="text-primary"/>{invoice?.card_name}</DialogTitle><DialogDescription>Compras incluídas em {invoice?.description.toLowerCase()}.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-glass p-3"><p className="text-xs text-muted-foreground">Valor da fatura</p><p className="font-display text-lg font-bold">{money.format(Number(invoice?.amount ?? 0))}</p></div><div className={`rounded-xl p-3 ${Math.abs(difference) < 0.005 ? 'bg-income/10 text-income' : 'bg-warning/15'}`}><p className="text-xs">{Math.abs(difference) < 0.005 ? 'Fatura conferida' : 'Diferença'}</p><p className="font-display text-lg font-bold">{money.format(Math.abs(difference))}</p></div></div><div className="divide-y divide-border">{purchases.map((purchase) => <div key={purchase.id} className="flex items-center justify-between gap-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{purchase.description}</p><p className="text-xs text-muted-foreground">{new Intl.DateTimeFormat('pt-BR').format(new Date(`${purchase.purchase_date}T12:00:00`))}</p></div><p className="font-display text-sm font-bold">{money.format(Number(purchase.amount))}</p></div>)}</div><div className="flex items-center justify-between border-t border-border pt-4"><p className="font-semibold">Soma das compras</p><p className="font-display text-xl font-bold">{money.format(total)}</p></div></DialogContent></Dialog>;
 }
