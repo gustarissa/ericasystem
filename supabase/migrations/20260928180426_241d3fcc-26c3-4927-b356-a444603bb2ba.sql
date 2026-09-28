@@ -1,0 +1,1 @@
+REVOKE ALL PRIVILEGES ON TABLE public.categories, public.transactions, public.card_purchases FROM anon;
