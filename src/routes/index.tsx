@@ -129,6 +129,19 @@ function Index() {
   if (!userId) return <AuthScreen mode={authMode} setMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} error={authError} onSubmit={handleAuth} />;
   const currentUserId = userId;
 
+  async function getOrCreateCategory(name: string, type: "income" | "expense") {
+    const normalizedName = name.trim();
+    const local = categories.find((item) => item.name.trim().toLowerCase() === normalizedName.toLowerCase() && item.type === type);
+    if (local) return local;
+
+    const { data: existing } = await supabase.from("categories").select("id,name,type,color,icon").eq("user_id", currentUserId).eq("type", type).ilike("name", normalizedName).maybeSingle();
+    if (existing) return existing as Category;
+
+    const { data, error } = await supabase.from("categories").insert({ user_id: currentUserId, name: normalizedName, type, color: type === "income" ? "green" : "blue", icon: "tag" }).select("id,name,type,color,icon").single();
+    if (error || !data) throw error ?? new Error("Não foi possível criar a categoria.");
+    return data as Category;
+  }
+
   async function saveTransaction(event: FormEvent<HTMLFormElement>, purchases: DraftPurchase[]) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -136,13 +149,14 @@ function Index() {
     const isCardInvoice = selectedType === "card";
     const type = (isCardInvoice ? "expense" : selectedType) as "income" | "expense";
     const categoryName = String(form.get("category")).trim();
-    let category = categories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase() && c.type === type);
-    if (!category) {
-      const { data, error } = await supabase.from("categories").insert({ user_id: currentUserId, name: categoryName, type, color: type === "income" ? "green" : "blue", icon: "tag" }).select("id,name,type,color,icon").single();
-      if (error || !data) { setNotice(error?.message ?? "Não foi possível criar a categoria."); return; }
-      category = data as Category;
-    }
+    let category: Category;
+    try { category = await getOrCreateCategory(categoryName, type); }
+    catch (categoryError) { setNotice(categoryError instanceof Error ? categoryError.message : "Não foi possível criar a categoria."); return; }
     const invoiceAmount = Number(form.get("amount"));
+    const reserveInvestment = type === "income" && form.get("reserveInvestment") === "on";
+    const investmentPercentRaw = reserveInvestment ? Number(form.get("investmentPercent")) : 0;
+    const investmentPercent = Math.min(100, Math.max(0, investmentPercentRaw || 0));
+    const investmentAmount = reserveInvestment ? invoiceAmount * (investmentPercent / 100) : 0;
     const validPurchases = purchases.filter((purchase) => purchase.description.trim() && Number(purchase.amount) > 0);
     if (isCardInvoice && validPurchases.length === 0) { setNotice("Adicione pelo menos uma compra à fatura."); return; }
     const { data: transaction, error } = await supabase.from("transactions").insert({ user_id: currentUserId, category_id: category.id, description: isCardInvoice ? `Fatura ${String(form.get("cardName")).trim()}` : String(form.get("description")), amount: invoiceAmount, type, transaction_date: String(form.get("date")), reconciled: false, is_card_invoice: isCardInvoice, card_name: isCardInvoice ? String(form.get("cardName")).trim() : null }).select("id").single();
@@ -155,7 +169,31 @@ function Index() {
         return;
       }
     }
-    setDialogOpen(false); setNotice(isCardInvoice ? "Fatura e compras adicionadas." : "Lançamento adicionado."); await loadData(currentUserId);
+    if (type === "income" && reserveInvestment && investmentAmount > 0) {
+      try {
+        const investmentCategory = await getOrCreateCategory("Investimentos", "expense");
+        const { error: investmentError } = await supabase.from("transactions").insert({
+          user_id: currentUserId,
+          category_id: investmentCategory.id,
+          description: `Reserva para investimentos (${investmentPercent}%) — ${String(form.get("description")).trim()}`,
+          amount: Number(investmentAmount.toFixed(2)),
+          type: "expense",
+          transaction_date: String(form.get("date")),
+          reconciled: false,
+          is_card_invoice: false,
+          card_name: null,
+        });
+        if (investmentError) throw investmentError;
+      } catch (investmentError) {
+        setNotice(investmentError instanceof Error ? `Entrada salva, mas a reserva não foi criada: ${investmentError.message}` : "Entrada salva, mas a reserva para investimentos não foi criada.");
+        await loadData(currentUserId);
+        setDialogOpen(false);
+        return;
+      }
+    }
+    setDialogOpen(false);
+    setNotice(isCardInvoice ? "Fatura e compras adicionadas." : type === "income" && reserveInvestment && investmentAmount > 0 ? `Entrada adicionada e ${money.format(investmentAmount)} reservados para investimentos.` : "Lançamento adicionado.");
+    await loadData(currentUserId);
   }
 
   async function reconcile(id: string) {
@@ -177,12 +215,9 @@ function Index() {
     const form = new FormData(event.currentTarget);
     const categoryName = String(form.get("category")).trim();
     const type = editingTransaction.type;
-    let category = categories.find((c) => c.name.toLowerCase() === categoryName.toLowerCase() && c.type === type);
-    if (!category) {
-      const { data, error } = await supabase.from("categories").insert({ user_id: currentUserId, name: categoryName, type, color: type === "income" ? "green" : "blue", icon: "tag" }).select("id,name,type,color,icon").single();
-      if (error || !data) { setNotice(error?.message ?? "Não foi possível criar a categoria."); return; }
-      category = data as Category;
-    }
+    let category: Category;
+    try { category = await getOrCreateCategory(categoryName, type); }
+    catch (categoryError) { setNotice(categoryError instanceof Error ? categoryError.message : "Não foi possível criar a categoria."); return; }
     const cardName = editingTransaction.is_card_invoice ? String(form.get("cardName")).trim() : null;
     const { error } = await supabase.from("transactions").update({
       category_id: category.id,
@@ -318,25 +353,31 @@ function TransactionDialog({ open, setOpen, initialKind, onSave }: { open: boole
   const [type, setType] = useState<"expense" | "income">("expense");
   const [isCardInvoice, setIsCardInvoice] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState("");
+  const [reserveInvestment, setReserveInvestment] = useState(false);
+  const [investmentPercent, setInvestmentPercent] = useState("10");
+  const [incomeAmount, setIncomeAmount] = useState("");
   const [purchases, setPurchases] = useState<DraftPurchase[]>([]);
   const purchaseTotal = purchases.reduce((sum, purchase) => sum + (Number(purchase.amount) || 0), 0);
   const difference = (Number(invoiceAmount) || 0) - purchaseTotal;
+  const investmentPercentNumber = Math.min(100, Math.max(0, Number(investmentPercent) || 0));
+  const investmentReserveAmount = reserveInvestment && type === "income" ? (Number(incomeAmount) || 0) * (investmentPercentNumber / 100) : 0;
+  const incomeAvailable = Math.max(0, (Number(incomeAmount) || 0) - investmentReserveAmount);
 
   function close(nextOpen: boolean) {
     setOpen(nextOpen);
-    if (!nextOpen) { setType("expense"); setIsCardInvoice(false); setInvoiceAmount(""); setPurchases([]); }
+    if (!nextOpen) { setType("expense"); setIsCardInvoice(false); setInvoiceAmount(""); setReserveInvestment(false); setInvestmentPercent("10"); setIncomeAmount(""); setPurchases([]); }
   }
 
   function changeType(nextType: "expense" | "income") {
     setType(nextType);
-    if (nextType === "income") { setIsCardInvoice(false); setInvoiceAmount(""); setPurchases([]); }
+    if (nextType === "income") { setIsCardInvoice(false); setInvoiceAmount(""); setPurchases([]); } else { setReserveInvestment(false); setIncomeAmount(""); }
   }
 
   function addPurchase() {
     setPurchases((current) => [...current, { id: crypto.randomUUID(), description: "", amount: "", purchaseDate: today }]);
   }
 
-  return <Dialog open={open} onOpenChange={close}><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl border-blue-200 bg-gradient-to-br from-sky-100 via-blue-50 to-cyan-100 text-slate-900 shadow-brand backdrop-blur-xl [&_input]:bg-white [&_select]:bg-white sm:max-w-2xl"><DialogHeader><DialogTitle className="font-display text-2xl text-slate-900">Novo lançamento</DialogTitle><DialogDescription>Registre uma entrada ou despesa.</DialogDescription></DialogHeader><form onSubmit={(event) => onSave(event, purchases)} className="grid gap-4"><input type="hidden" name="type" value={isCardInvoice ? "card" : type}/><label className="grid gap-1.5 text-sm font-medium">Tipo<select value={type} onChange={(event) => changeType(event.target.value as "expense" | "income")} className="h-10 rounded-xl border border-input bg-background px-3"><option value="expense">Despesa</option><option value="income">Entrada</option></select></label>{type === "expense" && <label className="flex items-center gap-3 rounded-xl border border-glass-border bg-glass p-3 text-sm font-medium"><input type="checkbox" checked={isCardInvoice} onChange={(event) => setIsCardInvoice(event.target.checked)} className="size-4 accent-primary"/>Esta despesa é uma fatura de cartão</label>}{isCardInvoice ? <><label className="grid gap-1.5 text-sm font-medium">Cartão<Input name="cardName" required maxLength={60} placeholder="Ex.: Nubank final 1234" className="h-10 rounded-xl"/></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-sm font-medium">Total da fatura <span className="text-[11px] font-normal text-muted-foreground">(calculado pelas compras)</span><Input name="amount" value={invoiceAmount} readOnly required type="number" min="0.01" step="0.01" placeholder="Adicione as compras" className="h-10 rounded-xl bg-glass"/></label><label className="grid gap-1.5 text-sm font-medium">Vencimento<Input name="date" required type="date" defaultValue={today} className="h-10 rounded-xl"/></label></div><input type="hidden" name="description" value="Fatura de cartão"/><div className="rounded-2xl border border-glass-border bg-glass p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Compras da fatura</p><p className="text-xs text-muted-foreground">Detalhe cada gasto cobrado no cartão.</p></div><Button type="button" variant="glass" size="sm" className="rounded-xl" onClick={addPurchase}><Plus/>Compra</Button></div><div className="mt-4 grid gap-3">{purchases.length === 0 && <p className="rounded-xl bg-glass-strong p-4 text-center text-sm text-muted-foreground">Nenhuma compra adicionada.</p>}{purchases.map((purchase, index) => <div key={purchase.id} className="grid gap-2 rounded-xl border border-glass-border p-3 sm:grid-cols-[1fr_130px_145px_36px]"><Input aria-label={`Descrição da compra ${index + 1}`} value={purchase.description} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, description: event.target.value } : item))} required placeholder="Descrição" className="h-9 rounded-lg"/><Input aria-label={`Valor da compra ${index + 1}`} value={purchase.amount} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, amount: event.target.value } : item))} required type="number" min="0.01" step="0.01" placeholder="Valor" className="h-9 rounded-lg"/><Input aria-label={`Data da compra ${index + 1}`} value={purchase.purchaseDate} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, purchaseDate: event.target.value } : item))} required type="date" className="h-9 rounded-lg"/><Button type="button" variant="ghost" size="icon" className="size-9 text-expense" aria-label={`Remover compra ${index + 1}`} onClick={() => setPurchases((current) => current.filter((item) => item.id !== purchase.id))}><Trash2/></Button></div>)}</div><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-glass-strong p-3"><p className="text-xs text-muted-foreground">Soma das compras</p><p className="font-display text-lg font-bold">{money.format(purchaseTotal)}</p></div><div className={`rounded-xl p-3 ${Math.abs(difference) < 0.005 && Number(invoiceAmount) > 0 ? 'bg-income/10 text-income' : 'bg-warning/15'}`}><p className="text-xs">{Math.abs(difference) < 0.005 && Number(invoiceAmount) > 0 ? 'Fatura conferida' : 'Diferença'}</p><p className="font-display text-lg font-bold">{money.format(Math.abs(difference))}</p></div></div></div></> : <><label className="grid gap-1.5 text-sm font-medium">Descrição<Input name="description" required maxLength={120} placeholder={type === "income" ? "Ex.: Salário" : "Ex.: Supermercado"} className="h-10 rounded-xl"/></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-sm font-medium">Valor<Input name="amount" required type="number" min="0.01" step="0.01" placeholder="0,00" className="h-10 rounded-xl"/></label><label className="grid gap-1.5 text-sm font-medium">Data<Input name="date" required type="date" defaultValue={today} className="h-10 rounded-xl"/></label></div></>}<label className="grid gap-1.5 text-sm font-medium">Categoria<Input name="category" required maxLength={60} placeholder={isCardInvoice ? "Ex.: Cartão de crédito" : type === "income" ? "Ex.: Trabalho" : "Ex.: Moradia"} className="h-10 rounded-xl"/></label><Button variant="hero" className="mt-2 h-11 rounded-xl"><Plus />Salvar lançamento</Button></form></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={close}><DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl border-blue-200 bg-gradient-to-br from-sky-100 via-blue-50 to-cyan-100 text-slate-900 shadow-brand backdrop-blur-xl [&_input]:bg-white [&_select]:bg-white sm:max-w-2xl"><DialogHeader><DialogTitle className="font-display text-2xl text-slate-900">Novo lançamento</DialogTitle><DialogDescription>Registre uma entrada ou despesa.</DialogDescription></DialogHeader><form onSubmit={(event) => onSave(event, purchases)} className="grid gap-4"><input type="hidden" name="type" value={isCardInvoice ? "card" : type}/><label className="grid gap-1.5 text-sm font-medium">Tipo<select value={type} onChange={(event) => changeType(event.target.value as "expense" | "income")} className="h-10 rounded-xl border border-input bg-background px-3"><option value="expense">Despesa</option><option value="income">Entrada</option></select></label>{type === "expense" && <label className="flex items-center gap-3 rounded-xl border border-glass-border bg-glass p-3 text-sm font-medium"><input type="checkbox" checked={isCardInvoice} onChange={(event) => setIsCardInvoice(event.target.checked)} className="size-4 accent-primary"/>Esta despesa é uma fatura de cartão</label>}{isCardInvoice ? <><label className="grid gap-1.5 text-sm font-medium">Cartão<Input name="cardName" required maxLength={60} placeholder="Ex.: Nubank final 1234" className="h-10 rounded-xl"/></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-sm font-medium">Total da fatura <span className="text-[11px] font-normal text-muted-foreground">(calculado pelas compras)</span><Input name="amount" value={invoiceAmount} readOnly required type="number" min="0.01" step="0.01" placeholder="Adicione as compras" className="h-10 rounded-xl bg-glass"/></label><label className="grid gap-1.5 text-sm font-medium">Vencimento<Input name="date" required type="date" defaultValue={today} className="h-10 rounded-xl"/></label></div><input type="hidden" name="description" value="Fatura de cartão"/><div className="rounded-2xl border border-glass-border bg-glass p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Compras da fatura</p><p className="text-xs text-muted-foreground">Detalhe cada gasto cobrado no cartão.</p></div><Button type="button" variant="glass" size="sm" className="rounded-xl" onClick={addPurchase}><Plus/>Compra</Button></div><div className="mt-4 grid gap-3">{purchases.length === 0 && <p className="rounded-xl bg-glass-strong p-4 text-center text-sm text-muted-foreground">Nenhuma compra adicionada.</p>}{purchases.map((purchase, index) => <div key={purchase.id} className="grid gap-2 rounded-xl border border-glass-border p-3 sm:grid-cols-[1fr_130px_145px_36px]"><Input aria-label={`Descrição da compra ${index + 1}`} value={purchase.description} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, description: event.target.value } : item))} required placeholder="Descrição" className="h-9 rounded-lg"/><Input aria-label={`Valor da compra ${index + 1}`} value={purchase.amount} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, amount: event.target.value } : item))} required type="number" min="0.01" step="0.01" placeholder="Valor" className="h-9 rounded-lg"/><Input aria-label={`Data da compra ${index + 1}`} value={purchase.purchaseDate} onChange={(event) => setPurchases((current) => current.map((item) => item.id === purchase.id ? { ...item, purchaseDate: event.target.value } : item))} required type="date" className="h-9 rounded-lg"/><Button type="button" variant="ghost" size="icon" className="size-9 text-expense" aria-label={`Remover compra ${index + 1}`} onClick={() => setPurchases((current) => current.filter((item) => item.id !== purchase.id))}><Trash2/></Button></div>)}</div><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-glass-strong p-3"><p className="text-xs text-muted-foreground">Soma das compras</p><p className="font-display text-lg font-bold">{money.format(purchaseTotal)}</p></div><div className={`rounded-xl p-3 ${Math.abs(difference) < 0.005 && Number(invoiceAmount) > 0 ? 'bg-income/10 text-income' : 'bg-warning/15'}`}><p className="text-xs">{Math.abs(difference) < 0.005 && Number(invoiceAmount) > 0 ? 'Fatura conferida' : 'Diferença'}</p><p className="font-display text-lg font-bold">{money.format(Math.abs(difference))}</p></div></div></div></> : <><label className="grid gap-1.5 text-sm font-medium">Descrição<Input name="description" required maxLength={120} placeholder={type === "income" ? "Ex.: Salário" : "Ex.: Supermercado"} className="h-10 rounded-xl"/></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-sm font-medium">Valor<Input name="amount" required type="number" min="0.01" step="0.01" placeholder="0,00" value={type === "income" ? incomeAmount : undefined} onChange={type === "income" ? (event) => setIncomeAmount(event.target.value) : undefined} className="h-10 rounded-xl"/></label><label className="grid gap-1.5 text-sm font-medium">Data<Input name="date" required type="date" defaultValue={today} className="h-10 rounded-xl"/></label></div>{type === "income" && <div className="rounded-2xl border border-glass-border bg-glass p-4"><label className="flex items-center gap-3 text-sm font-semibold"><input name="reserveInvestment" type="checkbox" checked={reserveInvestment} onChange={(event) => setReserveInvestment(event.target.checked)} className="size-4 accent-primary"/>Separar parte desta entrada para investimentos</label>{reserveInvestment && <div className="mt-4 grid gap-3 sm:grid-cols-[150px_1fr_1fr]"><label className="grid gap-1.5 text-sm font-medium">Percentual (%)<Input name="investmentPercent" value={investmentPercent} onChange={(event) => setInvestmentPercent(event.target.value)} required type="number" min="0.1" max="100" step="0.1" className="h-10 rounded-xl"/></label><div className="rounded-xl bg-glass-strong p-3"><p className="text-xs text-muted-foreground">Reserva</p><p className="font-display text-lg font-bold text-primary">{money.format(investmentReserveAmount)}</p></div><div className="rounded-xl bg-glass-strong p-3"><p className="text-xs text-muted-foreground">Disponível</p><p className="font-display text-lg font-bold text-income">{money.format(incomeAvailable)}</p></div></div>}<p className="mt-2 text-[11px] text-muted-foreground">Ao salvar, a reserva será registrada separadamente na categoria Investimentos.</p></div>}</>}<label className="grid gap-1.5 text-sm font-medium">Categoria<Input name="category" required maxLength={60} placeholder={isCardInvoice ? "Ex.: Cartão de crédito" : type === "income" ? "Ex.: Trabalho" : "Ex.: Moradia"} className="h-10 rounded-xl"/></label><Button variant="hero" className="mt-2 h-11 rounded-xl"><Plus />Salvar lançamento</Button></form></DialogContent></Dialog>;
 }
 
 function EditTransactionDialog({ transaction, category, onClose, onSave, onDelete }: { transaction: Tx | null; category: string; onClose: () => void; onSave: (e: FormEvent<HTMLFormElement>) => void; onDelete: () => void }) {
