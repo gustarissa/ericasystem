@@ -43,6 +43,10 @@ function Index() {
   const [transactions, setTransactions] = useState<Tx[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cardPurchases, setCardPurchases] = useState<CardPurchase[]>([]);
+  const [transactionSearch, setTransactionSearch] = useState("");
+  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>("all");
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
+  const [newEntryKind, setNewEntryKind] = useState<NewEntryKind>("expense");
   const [month, setMonth] = useState(() => new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Tx | null>(null);
