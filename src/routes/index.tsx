@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CreditCard, LoaderCircle, LogOut, Menu, Pencil, Plus, PiggyBank, ReceiptText, Sparkles, Trash2, WalletCards, X } from "lucide-react";
 
@@ -307,7 +307,7 @@ function Index() {
               <div className="mt-5 h-36"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--income)" stopOpacity={0.4}/><stop offset="95%" stopColor="var(--income)" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="var(--border)" vertical={false}/><XAxis dataKey="month" axisLine={false} tickLine={false} fontSize={11}/><Tooltip formatter={(v) => money.format(Number(v))}/><Area type="monotone" dataKey="entradas" stroke="var(--income)" fill="url(#incomeFill)" strokeWidth={3}/><Area type="monotone" dataKey="despesas" stroke="var(--expense)" fill="transparent" strokeWidth={2}/></AreaChart></ResponsiveContainer></div>
             </article>
             <article className="animate-rise rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-100 via-blue-50 to-cyan-100 p-6 shadow-glass backdrop-blur-xl [animation-delay:60ms]"><div className="flex justify-between"><span className="text-sm font-medium text-muted-foreground">Reserva do mês</span><span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary"><PiggyBank /></span></div><p className="mt-3 font-display text-3xl font-bold text-primary">{money.format(monthlyReserve)}</p><p className="mt-2 text-sm text-muted-foreground">Total separado para investimentos em {monthLabel.format(month)}.</p><div className="mt-5 rounded-2xl bg-white/70 p-4"><p className="text-xs font-medium text-muted-foreground">Proporção do que foi recebido</p><p className="mt-1 font-display text-lg font-bold">{income > 0 ? `${((monthlyReserve / income) * 100).toFixed(1).replace(".", ",")}%` : "0%"}</p></div></article>
-            <article id="relatorios" className="animate-rise scroll-mt-28 rounded-3xl border border-glass-border bg-glass p-6 shadow-glass backdrop-blur-xl [animation-delay:80ms]"><div className="flex justify-between"><span className="text-sm font-medium text-muted-foreground">Categoria com maior gasto</span><span className="rounded-full bg-expense/10 px-2.5 py-1 text-xs font-semibold text-expense">{expenses ? Math.round(((topCategory?.total ?? 0) / expenses) * 100) : 0}%</span></div><p className="mt-2 font-display text-2xl font-bold">{topCategory?.name ?? "Sem despesas"}</p><p className="font-display text-lg font-semibold text-muted-foreground">{money.format(topCategory?.total ?? 0)}</p><div className="mt-5 space-y-4">{categoryTotals.slice(0,4).map((c) => <div key={c.id}><div className="flex justify-between text-xs font-medium"><span>{c.name}</span><span className="text-muted-foreground">{money.format(c.total)}</span></div><div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-glass-strong"><div className="h-full rounded-full bg-hero" style={{ width: `${Math.max(8, (c.total / (topCategory?.total || 1)) * 100)}%` }} /></div></div>)}</div></article>
+            <article className="animate-rise rounded-3xl border border-glass-border bg-glass p-6 shadow-glass backdrop-blur-xl [animation-delay:80ms]"><div className="flex justify-between"><span className="text-sm font-medium text-muted-foreground">Categoria com maior gasto</span><span className="rounded-full bg-expense/10 px-2.5 py-1 text-xs font-semibold text-expense">{expenses ? Math.round(((topCategory?.total ?? 0) / expenses) * 100) : 0}%</span></div><p className="mt-2 font-display text-2xl font-bold">{topCategory?.name ?? "Sem despesas"}</p><p className="font-display text-lg font-semibold text-muted-foreground">{money.format(topCategory?.total ?? 0)}</p><div className="mt-5 space-y-4">{categoryTotals.slice(0,4).map((c) => <div key={c.id}><div className="flex justify-between text-xs font-medium"><span>{c.name}</span><span className="text-muted-foreground">{money.format(c.total)}</span></div><div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-glass-strong"><div className="h-full rounded-full bg-hero" style={{ width: `${Math.max(8, (c.total / (topCategory?.total || 1)) * 100)}%` }} /></div></div>)}</div></article>
             <article id="ia" className="animate-rise scroll-mt-28 rounded-3xl lg:col-span-4 border border-glass-border bg-glass p-6 shadow-glass backdrop-blur-xl [animation-delay:160ms]"><div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-xl bg-hero text-primary-foreground"><Sparkles /></span><p className="font-display text-sm font-bold uppercase text-primary">Insights IA</p></div><div className="mt-4 min-h-44 rounded-2xl bg-glass-strong p-4"><p className="text-sm font-semibold">Seu plano financeiro</p>{insight ? <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{insight}</p> : <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Analiso seu saldo, despesas e categorias para sugerir ajustes, reserva e caminhos de investimento compatíveis com o mês.</p>}</div><Button variant="hero" className="mt-4 w-full rounded-xl" onClick={askAI} disabled={insightLoading}>{insightLoading ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Gerar plano personalizado</Button><p className="mt-3 text-[10px] text-muted-foreground">Sugestões educativas. Investimentos envolvem riscos.</p></article>
           </div>
         </section>
@@ -348,6 +348,20 @@ function Index() {
           {filteredTransactions.length > 10 && !transactionSearch.trim() && transactionFilter === "all" && <div className="mt-4 flex justify-center"><Button type="button" variant="glass" className="rounded-xl" onClick={() => setShowAllTransactions((current) => !current)}>{showAllTransactions ? "Mostrar menos" : `Ver todos (${filteredTransactions.length})`}</Button></div>}
         </section>
 
+
+        <ReportsSection
+          month={month}
+          transactions={transactions}
+          categories={categories}
+          cardPurchases={cardPurchases}
+          monthTransactions={monthTransactions}
+          categoryTotals={categoryTotals}
+          income={income}
+          expenses={expenses}
+          balance={balance}
+          monthlyReserve={monthlyReserve}
+        />
+
         <section id="conciliacao" className="my-6 scroll-mt-28 rounded-3xl border border-glass-border bg-glass p-4 shadow-glass backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><div><h2 className="font-display text-xl font-bold">Conciliações</h2><p className="text-xs text-muted-foreground">Marque o que você já confirmou no extrato ou na fatura.</p></div><span className="rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold">{monthTransactions.filter((t) => !t.reconciled).length} pendentes</span></div><div className="mt-4 grid gap-3 md:grid-cols-2">{monthTransactions.filter((t) => !t.reconciled).map((t) => <div key={t.id} className="flex items-center gap-3 rounded-2xl border border-glass-border bg-glass-strong p-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{t.description}</p><p className="text-xs text-muted-foreground">{money.format(Number(t.amount))}</p></div><Button variant="glass" size="sm" className="rounded-xl" onClick={() => reconcile(t.id)}><Check />Conciliar</Button></div>)}</div></section>
       </div>
       {notice && <div role="status" className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-foreground px-4 py-3 text-sm text-background shadow-brand">{notice}<button className="ml-4" onClick={() => setNotice("")} aria-label="Fechar aviso">×</button></div>}
@@ -356,6 +370,179 @@ function Index() {
       <InvoiceDetailDialog invoice={invoiceDetail} purchases={cardPurchases.filter((purchase) => purchase.transaction_id === invoiceDetail?.id)} onClose={() => setInvoiceDetail(null)} onSavePurchase={updateCardPurchase} onDeletePurchase={deleteCardPurchase} />
     </main>
   );
+}
+
+
+function ReportsSection({ month, transactions, categories, cardPurchases, monthTransactions, categoryTotals, income, expenses, balance, monthlyReserve }: {
+  month: Date;
+  transactions: Tx[];
+  categories: Category[];
+  cardPurchases: CardPurchase[];
+  monthTransactions: Tx[];
+  categoryTotals: Array<Category & { total: number }>;
+  income: number;
+  expenses: number;
+  balance: number;
+  monthlyReserve: number;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const monthExpenses = monthTransactions.filter((transaction) => transaction.type === "expense");
+  const monthIncomes = monthTransactions.filter((transaction) => transaction.type === "income");
+  const confirmedExpenses = monthExpenses.filter((transaction) => transaction.reconciled);
+  const openExpenses = monthExpenses.filter((transaction) => !transaction.reconciled && transaction.transaction_date >= today);
+  const overdueExpenses = monthExpenses.filter((transaction) => !transaction.reconciled && transaction.transaction_date < today);
+  const confirmedTotal = confirmedExpenses.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const openTotal = openExpenses.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const overdueTotal = overdueExpenses.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+
+  const previousMonth = new Date(month.getFullYear(), month.getMonth() - 1, 1);
+  const previousTransactions = transactions.filter((transaction) => {
+    const date = new Date(transaction.transaction_date + "T12:00:00");
+    return date.getMonth() === previousMonth.getMonth() && date.getFullYear() === previousMonth.getFullYear();
+  });
+  const previousIncome = previousTransactions.filter((transaction) => transaction.type === "income").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const previousExpenses = previousTransactions.filter((transaction) => transaction.type === "expense").reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const previousBalance = previousIncome - previousExpenses;
+  const balanceDifference = balance - previousBalance;
+
+  const invoices = monthExpenses.filter((transaction) => transaction.is_card_invoice);
+  const invoiceIds = new Set(invoices.map((invoice) => invoice.id));
+  const invoicePurchases = cardPurchases.filter((purchase) => invoiceIds.has(purchase.transaction_id));
+  const invoicesTotal = invoices.reduce((sum, invoice) => sum + Number(invoice.amount), 0);
+  const purchasesTotal = invoicePurchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
+  const cardTotals = Array.from(invoices.reduce((map, invoice) => {
+    const name = invoice.card_name || "Cartão não informado";
+    map.set(name, (map.get(name) || 0) + Number(invoice.amount));
+    return map;
+  }, new Map<string, number>())).sort((a, b) => b[1] - a[1]);
+
+  const expenseMonths = new Map<string, Set<string>>();
+  transactions.filter((transaction) => transaction.type === "expense" && !transaction.description.startsWith("Reserva para investimentos (")).forEach((transaction) => {
+    const key = transaction.description.trim().toLocaleLowerCase("pt-BR");
+    const months = expenseMonths.get(key) || new Set<string>();
+    months.add(transaction.transaction_date.slice(0, 7));
+    expenseMonths.set(key, months);
+  });
+  const recurringKeys = new Set(Array.from(expenseMonths.entries()).filter(([, months]) => months.size >= 2).map(([key]) => key));
+  const recurringExpenses = monthExpenses.filter((transaction) => recurringKeys.has(transaction.description.trim().toLocaleLowerCase("pt-BR")));
+  const recurringTotal = recurringExpenses.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const variableTotal = Math.max(0, expenses - recurringTotal);
+  const recurringGroups = Array.from(recurringExpenses.reduce((map, transaction) => {
+    const key = transaction.description.trim().toLocaleLowerCase("pt-BR");
+    const current = map.get(key) || { label: transaction.description, total: 0 };
+    current.total += Number(transaction.amount);
+    map.set(key, current);
+    return map;
+  }, new Map<string, { label: string; total: number }>()).values()).sort((a, b) => b.total - a.total);
+
+  const incomeSources = categories.filter((category) => category.type === "income").map((category) => ({
+    name: category.name,
+    total: monthIncomes.filter((transaction) => transaction.category_id === category.id).reduce((sum, transaction) => sum + Number(transaction.amount), 0),
+  })).filter((source) => source.total > 0).sort((a, b) => b.total - a.total);
+  const receivedIncome = monthIncomes.filter((transaction) => transaction.transaction_date <= today).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const expectedIncome = monthIncomes.filter((transaction) => transaction.transaction_date > today).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+
+  const reserveHistory = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(month.getFullYear(), month.getMonth() - 5 + index, 1);
+    const total = transactions.filter((transaction) => {
+      const transactionDate = new Date(transaction.transaction_date + "T12:00:00");
+      return transaction.type === "expense" && transaction.description.startsWith("Reserva para investimentos (") && transactionDate.getMonth() === date.getMonth() && transactionDate.getFullYear() === date.getFullYear();
+    }).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+    return { label: new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(date).replace(".", ""), total };
+  });
+  const maxReserve = Math.max(1, ...reserveHistory.map((item) => item.total));
+
+  const reconciledTransactions = monthTransactions.filter((transaction) => transaction.reconciled);
+  const pendingTransactions = monthTransactions.filter((transaction) => !transaction.reconciled);
+  const reconciledValue = reconciledTransactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const pendingValue = pendingTransactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const reconciliationRate = monthTransactions.length ? Math.round((reconciledTransactions.length / monthTransactions.length) * 100) : 0;
+
+  const futureIncome = monthIncomes.filter((transaction) => transaction.transaction_date > today).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const futureExpenses = monthExpenses.filter((transaction) => transaction.transaction_date > today).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const monthName = monthLabel.format(month);
+
+  return <section id="relatorios" className="mt-6 scroll-mt-28">
+    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm text-muted-foreground">Análises detalhadas</p><h2 className="font-display text-3xl font-bold">Relatórios</h2></div><span className="w-fit rounded-full border border-glass-border bg-glass px-3 py-1 text-xs font-semibold capitalize">{monthName}</span></div>
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <ReportCard title="1. Resumo mensal" subtitle="Entradas, despesas, reserva e saldo do período.">
+        <div className="grid grid-cols-2 gap-3"><ReportMetric label="Recebido" value={money.format(income)} tone="income"/><ReportMetric label="Gasto" value={money.format(expenses)} tone="expense"/><ReportMetric label="Reservado" value={money.format(monthlyReserve)} tone="primary"/><ReportMetric label="Saldo" value={money.format(balance)} tone={balance >= 0 ? "income" : "expense"}/></div>
+        <p className="mt-4 text-xs text-muted-foreground">Comparado ao mês anterior: <strong className={balanceDifference >= 0 ? "text-income" : "text-expense"}>{balanceDifference >= 0 ? "+" : ""}{money.format(balanceDifference)}</strong>.</p>
+      </ReportCard>
+
+      <ReportCard title="2. Despesas por categoria" subtitle="Participação de cada categoria no total gasto.">
+        <div className="space-y-4">{categoryTotals.slice(0, 6).map((category) => <ReportBar key={category.id} label={category.name} value={category.total} ratio={expenses ? category.total / expenses : 0}/>)}</div>
+        {!categoryTotals.length && <ReportEmpty text="Nenhuma despesa no mês selecionado."/>}
+      </ReportCard>
+
+      <ReportCard title="3. Situação das contas" subtitle="Estimativa baseada na data e na conciliação do lançamento.">
+        <div className="grid gap-3"><ReportStatus label="Pagas / confirmadas" count={confirmedExpenses.length} value={confirmedTotal} tone="income"/><ReportStatus label="Em aberto" count={openExpenses.length} value={openTotal} tone="warning"/><ReportStatus label="Vencidas" count={overdueExpenses.length} value={overdueTotal} tone="expense"/></div>
+        <p className="mt-3 text-[11px] text-muted-foreground">Uma conta conciliada é considerada confirmada. As demais são classificadas pela data do lançamento.</p>
+      </ReportCard>
+
+      <ReportCard title="4. Faturas de cartão" subtitle="Totais por cartão e conferência das compras.">
+        <div className="grid grid-cols-2 gap-3"><ReportMetric label="Faturas" value={String(invoices.length)} tone="primary"/><ReportMetric label="Total" value={money.format(invoicesTotal)} tone="expense"/><ReportMetric label="Compras" value={money.format(purchasesTotal)} tone="default"/><ReportMetric label="Diferença" value={money.format(Math.abs(invoicesTotal - purchasesTotal))} tone={Math.abs(invoicesTotal - purchasesTotal) < 0.005 ? "income" : "warning"}/></div>
+        <div className="mt-4 space-y-2">{cardTotals.slice(0, 4).map(([name, total]) => <div key={name} className="flex justify-between text-sm"><span className="truncate text-muted-foreground">{name}</span><strong>{money.format(total)}</strong></div>)}</div>
+        {!invoices.length && <ReportEmpty text="Nenhuma fatura cadastrada neste mês."/>}
+      </ReportCard>
+
+      <ReportCard title="5. Reservas e investimentos" subtitle="Evolução do valor separado nos últimos seis meses.">
+        <p className="font-display text-3xl font-bold text-primary">{money.format(monthlyReserve)}</p><p className="text-xs text-muted-foreground">{income > 0 ? ((monthlyReserve / income) * 100).toFixed(1).replace(".", ",") : "0"}% da renda do mês.</p>
+        <div className="mt-4 flex h-28 items-end gap-2">{reserveHistory.map((item) => <div key={item.label} className="flex flex-1 flex-col items-center gap-1"><span className="text-[10px] font-semibold">{item.total ? money.format(item.total) : "—"}</span><div className="w-full rounded-t-lg bg-primary/70" style={{ height: Math.max(6, (item.total / maxReserve) * 72) }}/><span className="text-[10px] uppercase text-muted-foreground">{item.label}</span></div>)}</div>
+      </ReportCard>
+
+      <ReportCard title="6. Receitas" subtitle="Valores recebidos, previstos e principais origens.">
+        <div className="grid grid-cols-2 gap-3"><ReportMetric label="Recebidas até hoje" value={money.format(receivedIncome)} tone="income"/><ReportMetric label="Previstas" value={money.format(expectedIncome)} tone="primary"/></div>
+        <div className="mt-4 space-y-3">{incomeSources.slice(0, 5).map((source) => <ReportBar key={source.name} label={source.name} value={source.total} ratio={income ? source.total / income : 0} tone="income"/>)}</div>
+        {!monthIncomes.length && <ReportEmpty text="Nenhuma receita no mês selecionado."/>}
+      </ReportCard>
+
+      <ReportCard title="7. Fixas e variáveis" subtitle="Despesas repetidas em meses diferentes são consideradas fixas.">
+        <div className="grid grid-cols-2 gap-3"><ReportMetric label="Fixas" value={money.format(recurringTotal)} tone="primary"/><ReportMetric label="Variáveis" value={money.format(variableTotal)} tone="warning"/></div>
+        <div className="mt-4 h-3 overflow-hidden rounded-full bg-warning/30"><div className="h-full bg-primary" style={{ width: (expenses ? recurringTotal / expenses * 100 : 0) + "%" }}/></div>
+        <p className="mt-2 text-xs text-muted-foreground">{expenses ? Math.round(recurringTotal / expenses * 100) : 0}% das despesas são recorrentes.</p>
+      </ReportCard>
+
+      <ReportCard title="8. Recorrências e assinaturas" subtitle="Lançamentos com o mesmo nome em dois ou mais meses.">
+        <p className="font-display text-2xl font-bold">{money.format(recurringTotal)} <span className="text-sm font-medium text-muted-foreground">por mês</span></p><p className="text-xs text-muted-foreground">Projeção anual: {money.format(recurringTotal * 12)}</p>
+        <div className="mt-4 divide-y divide-border">{recurringGroups.slice(0, 6).map((item) => <div key={item.label} className="flex justify-between gap-3 py-2 text-sm"><span className="truncate">{item.label}</span><strong>{money.format(item.total)}</strong></div>)}</div>
+        {!recurringGroups.length && <ReportEmpty text="Ainda não há repetições suficientes para identificar recorrências."/>}
+      </ReportCard>
+
+      <ReportCard title="9. Conciliações" subtitle="Acompanhamento do que foi conferido no extrato ou na fatura.">
+        <div className="flex items-end justify-between"><div><p className="font-display text-4xl font-bold text-primary">{reconciliationRate}%</p><p className="text-xs text-muted-foreground">dos lançamentos conciliados</p></div><p className="text-sm font-semibold">{reconciledTransactions.length}/{monthTransactions.length}</p></div>
+        <div className="mt-4 h-3 overflow-hidden rounded-full bg-glass-strong"><div className="h-full rounded-full bg-primary" style={{ width: reconciliationRate + "%" }}/></div>
+        <div className="mt-4 grid grid-cols-2 gap-3"><ReportMetric label="Conciliado" value={money.format(reconciledValue)} tone="income"/><ReportMetric label="Pendente" value={money.format(pendingValue)} tone="warning"/></div>
+      </ReportCard>
+
+      <ReportCard title="10. Previsão do mês" subtitle="Saldo final considerando tudo que já foi lançado para o mês." className="md:col-span-2 xl:col-span-3">
+        <div className="grid gap-3 sm:grid-cols-3"><ReportMetric label="Saldo previsto" value={money.format(balance)} tone={balance >= 0 ? "income" : "expense"}/><ReportMetric label="Receitas futuras" value={money.format(futureIncome)} tone="income"/><ReportMetric label="Despesas futuras" value={money.format(futureExpenses)} tone="expense"/></div>
+        <p className={"mt-4 rounded-2xl p-4 text-sm font-medium " + (balance >= 0 ? "bg-income/10 text-income" : "bg-expense/10 text-expense")}>{balance >= 0 ? "A previsão indica saldo positivo ao final do mês." : "Atenção: os lançamentos atuais indicam saldo negativo ao final do mês."}</p>
+      </ReportCard>
+    </div>
+  </section>;
+}
+
+function ReportCard({ title, subtitle, children, className = "" }: { title: string; subtitle: string; children: ReactNode; className?: string }) {
+  return <article className={"rounded-3xl border border-glass-border bg-glass p-5 shadow-glass backdrop-blur-xl " + className}><h3 className="font-display text-lg font-bold">{title}</h3><p className="mt-1 text-xs text-muted-foreground">{subtitle}</p><div className="mt-5">{children}</div></article>;
+}
+
+function ReportMetric({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "income" | "expense" | "primary" | "warning" }) {
+  const tones = { default: "text-foreground", income: "text-income", expense: "text-expense", primary: "text-primary", warning: "text-warning" };
+  return <div className="rounded-2xl bg-glass-strong p-3"><p className="text-[11px] text-muted-foreground">{label}</p><p className={"mt-1 font-display text-base font-bold " + tones[tone]}>{value}</p></div>;
+}
+
+function ReportBar({ label, value, ratio, tone = "primary" }: { label: string; value: number; ratio: number; tone?: "primary" | "income" }) {
+  return <div><div className="flex justify-between gap-3 text-xs font-medium"><span className="truncate">{label}</span><span className="shrink-0 text-muted-foreground">{money.format(value)}</span></div><div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-glass-strong"><div className={tone === "income" ? "h-full rounded-full bg-income" : "h-full rounded-full bg-primary"} style={{ width: Math.max(5, Math.min(100, ratio * 100)) + "%" }}/></div></div>;
+}
+
+function ReportStatus({ label, count, value, tone }: { label: string; count: number; value: number; tone: "income" | "warning" | "expense" }) {
+  const tones = { income: "bg-income/10 text-income", warning: "bg-warning/15 text-warning", expense: "bg-expense/10 text-expense" };
+  return <div className={"flex items-center justify-between rounded-2xl p-3 " + tones[tone]}><div><p className="text-sm font-semibold">{label}</p><p className="text-xs opacity-80">{count} lançamento{count === 1 ? "" : "s"}</p></div><strong className="font-display">{money.format(value)}</strong></div>;
+}
+
+function ReportEmpty({ text }: { text: string }) {
+  return <p className="mt-4 rounded-2xl bg-glass-strong p-4 text-center text-xs text-muted-foreground">{text}</p>;
 }
 
 function Logo() { return <span className="grid size-11 place-items-center rounded-2xl bg-hero font-display text-lg font-bold text-primary-foreground shadow-brand">E</span>; }
