@@ -281,7 +281,14 @@ function Index() {
 
   async function askAI() {
     setInsightLoading(true); setNotice("");
-    try { const result = await runInsight({ data: { income, expenses, balance, topCategory: topCategory?.name ?? "Sem despesas", topCategoryAmount: topCategory?.total ?? 0 } }); setInsight(result.text); }
+    const today = new Date().toISOString().slice(0, 10);
+    const overdueAmount = monthTransactions.filter((transaction) => transaction.type === "expense" && !transaction.reconciled && transaction.transaction_date < today).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+    const pendingReconciliations = monthTransactions.filter((transaction) => !transaction.reconciled).length;
+    const cardInvoiceTotal = monthTransactions.filter((transaction) => transaction.is_card_invoice).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+    try {
+      const result = await runInsight({ data: { income, expenses, balance, monthlyReserve, overdueAmount, pendingReconciliations, cardInvoiceTotal, topCategory: topCategory?.name ?? "Sem despesas", topCategoryAmount: topCategory?.total ?? 0 } });
+      setInsight(result.text);
+    }
     catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível gerar a análise."); }
     finally { setInsightLoading(false); }
   }
