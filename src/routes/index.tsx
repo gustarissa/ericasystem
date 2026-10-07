@@ -733,6 +733,11 @@ function TransactionDialog({ open, setOpen, initialKind, categories, onSave }: {
     setCustomExpenseCategory("");
   }, [open, initialKind]);
 
+  useEffect(() => {
+    if (!isCardInvoice) return;
+    setInvoiceAmount(purchaseTotal > 0 ? purchaseTotal.toFixed(2) : "");
+  }, [isCardInvoice, purchaseTotal]);
+
   function close(nextOpen: boolean) {
     setOpen(nextOpen);
     if (!nextOpen) { setType("expense"); setIsCardInvoice(false); setInvoiceAmount(""); setReserveInvestment(false); setInvestmentPercent("10"); setInvestmentType("Reserva de emergência"); setIncomeAmount(""); setExpenseCategory("Alimentação"); setCustomExpenseCategory(""); setPurchases([]); }
