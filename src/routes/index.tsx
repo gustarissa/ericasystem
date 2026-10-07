@@ -186,7 +186,16 @@ function Index() {
     let category: Category;
     try { category = await getOrCreateCategory(categoryName, type); }
     catch (categoryError) { setNotice(categoryError instanceof Error ? categoryError.message : "Não foi possível criar a categoria."); return; }
-    const invoiceAmount = Number(form.get("amount"));
+    const submittedAmount = Number(form.get("amount"));
+    const validPurchases = purchases.filter((purchase) => purchase.description.trim() && Number(purchase.amount) > 0);
+    if (isCardInvoice && validPurchases.length === 0) { setNotice("Adicione pelo menos uma compra à fatura."); return; }
+    const invoiceAmount = isCardInvoice
+      ? validPurchases.reduce((total, purchase) => total + Number(purchase.amount), 0)
+      : submittedAmount;
+    if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
+      setNotice("Informe um valor maior que zero.");
+      return;
+    }
     const reserveInvestment = type === "income" && form.get("reserveInvestment") === "on";
     const investmentPercentRaw = reserveInvestment ? Number(form.get("investmentPercent")) : 0;
     const investmentType = reserveInvestment ? String(form.get("investmentType")) : "";
@@ -196,8 +205,6 @@ function Index() {
     }
     const investmentPercent = Math.min(100, Math.max(0, investmentPercentRaw || 0));
     const investmentAmount = reserveInvestment ? invoiceAmount * (investmentPercent / 100) : 0;
-    const validPurchases = purchases.filter((purchase) => purchase.description.trim() && Number(purchase.amount) > 0);
-    if (isCardInvoice && validPurchases.length === 0) { setNotice("Adicione pelo menos uma compra à fatura."); return; }
     const { data: transaction, error } = await supabase.from("transactions").insert({ user_id: currentUserId, category_id: category.id, description: isCardInvoice ? `Fatura ${String(form.get("cardName")).trim()}` : String(form.get("description")), amount: invoiceAmount, type, transaction_date: String(form.get("date")), reconciled: false, is_card_invoice: isCardInvoice, card_name: isCardInvoice ? String(form.get("cardName")).trim() : null }).select("id").single();
     if (error || !transaction) { setNotice(error?.message ?? "Não foi possível salvar o lançamento."); return; }
     if (isCardInvoice) {
