@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CreditCard, LoaderCircle, LogOut, Menu, Pencil, Plus, PiggyBank, ReceiptText, Sparkles, Trash2, WalletCards, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CreditCard, LoaderCircle, LogOut, Pencil, Plus, PiggyBank, ReceiptText, Sparkles, Trash2, WalletCards, X } from "lucide-react";
 
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,7 +68,6 @@ function Index() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Tx | null>(null);
   const [invoiceDetail, setInvoiceDetail] = useState<Tx | null>(null);
-  const [mobileMenu, setMobileMenu] = useState(false);
   const [notice, setNotice] = useState("");
   const [insight, setInsight] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
@@ -312,12 +311,15 @@ function Index() {
       <div className="mx-auto max-w-7xl">
         <header className="sticky top-4 z-30 flex items-center justify-between rounded-3xl border border-glass-border bg-glass px-4 py-3 shadow-glass backdrop-blur-xl sm:px-6">
           <a href="#resumo" className="flex items-center gap-3"><Logo /><div><p className="font-display text-xl font-bold leading-none">ESF</p><p className="mt-1 text-[10px] font-semibold uppercase text-muted-foreground">Controle financeiro</p></div></a>
-          <nav className="hidden items-center gap-1 rounded-2xl border border-glass-border bg-glass p-1 text-sm font-medium md:flex">
-            {[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} className="rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-glass-strong hover:text-foreground">{label}</a>)}
+          <nav className="fixed left-1/2 top-4 z-50 hidden -translate-x-1/2 items-center gap-1 rounded-2xl border border-glass-border bg-glass-strong/95 p-1.5 text-sm font-medium shadow-glass backdrop-blur-2xl md:flex">
+            {[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} className="whitespace-nowrap rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-white/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">{label}</a>)}
           </nav>
-          <div className="flex gap-2"><Button variant="glass" className="hidden rounded-xl sm:inline-flex" onClick={() => openNewEntry("expense")}><Plus />Novo lançamento</Button><Button variant="ghost" size="icon" className="md:hidden" aria-label="Abrir menu" onClick={() => setMobileMenu(!mobileMenu)}>{mobileMenu ? <X /> : <Menu />}</Button><Button variant="ghost" size="icon" aria-label="Sair" onClick={() => supabase.auth.signOut()}><LogOut /></Button></div>
-          {mobileMenu && <nav className="absolute left-4 right-4 top-[76px] grid gap-1 rounded-2xl border border-glass-border bg-glass-strong p-2 shadow-glass backdrop-blur-xl md:hidden">{[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} onClick={() => setMobileMenu(false)} className="rounded-xl px-4 py-3 text-sm font-medium">{label}</a>)}</nav>}
+          <div className="flex gap-2"><Button variant="glass" className="hidden rounded-xl sm:inline-flex" onClick={() => openNewEntry("expense")}><Plus />Novo lançamento</Button><Button variant="ghost" size="icon" aria-label="Sair" onClick={() => supabase.auth.signOut()}><LogOut /></Button></div>
         </header>
+
+        <nav className="fixed bottom-3 left-3 right-3 z-50 flex items-center justify-between gap-1 overflow-x-auto rounded-2xl border border-glass-border bg-glass-strong/95 p-1.5 shadow-glass backdrop-blur-2xl md:hidden">
+          {[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} onClick={() => setMobileMenu(false)} className="min-w-max flex-1 whitespace-nowrap rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold text-muted-foreground transition hover:bg-white/70 hover:text-foreground">{label}</a>)}
+        </nav>
 
         <section id="resumo" className="scroll-mt-28 pt-6">
           <div className="overflow-hidden rounded-[28px] border border-glass-border bg-glass shadow-glass backdrop-blur-xl">
