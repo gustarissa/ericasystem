@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CreditCard, LoaderCircle, LogOut, Pencil, Plus, PiggyBank, ReceiptText, Sparkles, Trash2, WalletCards, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CreditCard, LoaderCircle, LogOut, Menu, Pencil, Plus, PiggyBank, ReceiptText, Sparkles, Trash2, WalletCards, X } from "lucide-react";
 
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,6 +68,7 @@ function Index() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Tx | null>(null);
   const [invoiceDetail, setInvoiceDetail] = useState<Tx | null>(null);
+  const [mobileMenu, setMobileMenu] = useState(false);
   const [notice, setNotice] = useState("");
   const [insight, setInsight] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
@@ -311,30 +312,27 @@ function Index() {
       <div className="mx-auto max-w-7xl">
         <header className="sticky top-4 z-30 flex items-center justify-between rounded-3xl border border-glass-border bg-glass px-4 py-3 shadow-glass backdrop-blur-xl sm:px-6">
           <a href="#resumo" className="flex items-center gap-3"><Logo /><div><p className="font-display text-xl font-bold leading-none">ESF</p><p className="mt-1 text-[10px] font-semibold uppercase text-muted-foreground">Controle financeiro</p></div></a>
-          <nav className="fixed left-1/2 top-4 z-50 hidden -translate-x-1/2 items-center gap-1 rounded-2xl border border-glass-border bg-glass-strong/95 p-1.5 text-sm font-medium shadow-glass backdrop-blur-2xl md:flex">
-            {[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} className="whitespace-nowrap rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-white/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">{label}</a>)}
+          <nav className="hidden items-center gap-1 rounded-2xl border border-glass-border bg-glass p-1 text-sm font-medium md:flex">
+            {[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} className="rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-glass-strong hover:text-foreground">{label}</a>)}
           </nav>
-          <div className="flex gap-2"><Button variant="glass" className="hidden rounded-xl sm:inline-flex" onClick={() => openNewEntry("expense")}><Plus />Novo lançamento</Button><Button variant="ghost" size="icon" aria-label="Sair" onClick={() => supabase.auth.signOut()}><LogOut /></Button></div>
+          <div className="flex gap-2"><Button variant="glass" className="hidden rounded-xl sm:inline-flex" onClick={() => openNewEntry("expense")}><Plus />Novo lançamento</Button><Button variant="ghost" size="icon" className="md:hidden" aria-label="Abrir menu" onClick={() => setMobileMenu(!mobileMenu)}>{mobileMenu ? <X /> : <Menu />}</Button><Button variant="ghost" size="icon" aria-label="Sair" onClick={() => supabase.auth.signOut()}><LogOut /></Button></div>
+          {mobileMenu && <nav className="absolute left-4 right-4 top-[76px] z-40 grid gap-1 rounded-2xl border border-glass-border bg-glass-strong p-2 shadow-glass backdrop-blur-xl md:hidden">{[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} onClick={() => setMobileMenu(false)} className="rounded-xl px-4 py-3 text-sm font-medium">{label}</a>)}</nav>}
         </header>
-
-        <nav className="fixed bottom-3 left-3 right-3 z-50 flex items-center justify-between gap-1 overflow-x-auto rounded-2xl border border-glass-border bg-glass-strong/95 p-1.5 shadow-glass backdrop-blur-2xl md:hidden">
-          {[['resumo','Visão geral'],['movimentos','Movimentos'],['relatorios','Relatórios'],['conciliacao','Conciliações'],['ia','Insights IA']].map(([id,label]) => <a key={id} href={`#${id}`} onClick={() => setMobileMenu(false)} className="min-w-max flex-1 whitespace-nowrap rounded-xl px-2.5 py-2 text-center text-[11px] font-semibold text-muted-foreground transition hover:bg-white/70 hover:text-foreground">{label}</a>)}
-        </nav>
 
         <section id="resumo" className="scroll-mt-28 pt-6">
           <div className="overflow-hidden rounded-[28px] border border-glass-border bg-glass shadow-glass backdrop-blur-xl">
-            <div className="flex flex-col gap-5 bg-primary px-6 py-7 text-primary-foreground sm:flex-row sm:items-end sm:justify-between sm:px-8">
+            <div className="flex flex-col gap-5 bg-gradient-to-r from-sky-200 via-blue-100 to-cyan-100 px-6 py-7 text-slate-800 sm:flex-row sm:items-end sm:justify-between sm:px-8">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-foreground/70">ESF • Controle financeiro pessoal</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">ESF • Controle financeiro pessoal</p>
                 <h1 className="mt-2 font-display text-3xl font-bold sm:text-4xl">Orçamento Pessoal {month.getFullYear()}</h1>
-                <p className="mt-1 text-sm capitalize text-primary-foreground/80">{monthLabel.format(month)} • visão consolidada do mês</p>
+                <p className="mt-1 text-sm capitalize text-slate-600">{monthLabel.format(month)} • visão consolidada do mês</p>
               </div>
               <div className="flex flex-col items-start gap-3 sm:items-end">
-                <p className="text-xs text-primary-foreground/70">Atualizado em {updatedLabel}</p>
-                <div className="flex items-center gap-1 rounded-xl bg-white/10 p-1">
-                  <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15 hover:text-primary-foreground" aria-label="Mês anterior" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft /></Button>
+                <p className="text-xs text-slate-600">Atualizado em {updatedLabel}</p>
+                <div className="flex items-center gap-1 rounded-xl bg-white/55 p-1">
+                  <Button variant="ghost" size="icon" className="text-slate-700 hover:bg-white/60 hover:text-slate-900" aria-label="Mês anterior" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft /></Button>
                   <span className="min-w-32 text-center text-sm font-semibold capitalize">{monthLabel.format(month)}</span>
-                  <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15 hover:text-primary-foreground" aria-label="Próximo mês" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight /></Button>
+                  <Button variant="ghost" size="icon" className="text-slate-700 hover:bg-white/60 hover:text-slate-900" aria-label="Próximo mês" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight /></Button>
                 </div>
               </div>
             </div>
@@ -357,7 +355,7 @@ function Index() {
             >
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">
-                  <thead><tr className="bg-primary text-primary-foreground"><th className="px-4 py-3 font-semibold">DATA</th><th className="px-4 py-3 font-semibold">DESCRIÇÃO</th><th className="px-4 py-3 text-right font-semibold">VALOR</th><th className="px-4 py-3 text-center font-semibold">STATUS</th><th className="w-12 px-2 py-3"></th></tr></thead>
+                  <thead><tr className="bg-gradient-to-r from-sky-200 via-blue-100 to-cyan-100 text-slate-800"><th className="px-4 py-3 font-semibold">DATA</th><th className="px-4 py-3 font-semibold">DESCRIÇÃO</th><th className="px-4 py-3 text-right font-semibold">VALOR</th><th className="px-4 py-3 text-center font-semibold">STATUS</th><th className="w-12 px-2 py-3"></th></tr></thead>
                   <tbody className="divide-y divide-border/70">
                     {incomeRows.length ? incomeRows.map((t) => <tr key={t.id} className="bg-white/35 transition hover:bg-white/60">
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(`${t.transaction_date}T12:00:00`))}</td>
@@ -379,7 +377,7 @@ function Index() {
               >
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[520px] text-left text-sm">
-                    <thead><tr className="bg-primary text-primary-foreground"><th className="px-4 py-3 font-semibold">CARTÃO</th><th className="px-4 py-3 font-semibold">VENC.</th><th className="px-4 py-3 text-right font-semibold">TOTAL</th><th className="px-4 py-3 text-center font-semibold">STATUS</th></tr></thead>
+                    <thead><tr className="bg-gradient-to-r from-sky-200 via-blue-100 to-cyan-100 text-slate-800"><th className="px-4 py-3 font-semibold">CARTÃO</th><th className="px-4 py-3 font-semibold">VENC.</th><th className="px-4 py-3 text-right font-semibold">TOTAL</th><th className="px-4 py-3 text-center font-semibold">STATUS</th></tr></thead>
                     <tbody className="divide-y divide-border/70">
                       {cardRows.length ? cardRows.map((t) => <tr key={t.id} className="bg-white/35 transition hover:bg-white/60">
                         <td className="px-4 py-3"><button type="button" className="font-semibold hover:text-primary" onClick={() => setInvoiceDetail(t)}>{t.card_name || t.description}</button><button type="button" className="mt-1 block text-[11px] font-medium text-primary" onClick={() => setInvoiceDetail(t)}>Ver compras ({cardPurchases.filter((purchase) => purchase.transaction_id === t.id).length})</button></td>
@@ -415,7 +413,7 @@ function Index() {
           >
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead><tr className="bg-primary text-primary-foreground"><th className="px-4 py-3 font-semibold">VENC.</th><th className="px-4 py-3 font-semibold">DESPESA</th><th className="px-4 py-3 font-semibold">CATEGORIA</th><th className="px-4 py-3 text-right font-semibold">VALOR</th><th className="px-4 py-3 font-semibold">PRIORIDADE</th><th className="px-4 py-3 text-center font-semibold">STATUS</th><th className="w-12 px-2 py-3"></th></tr></thead>
+                <thead><tr className="bg-gradient-to-r from-sky-200 via-blue-100 to-cyan-100 text-slate-800"><th className="px-4 py-3 font-semibold">VENC.</th><th className="px-4 py-3 font-semibold">DESPESA</th><th className="px-4 py-3 font-semibold">CATEGORIA</th><th className="px-4 py-3 text-right font-semibold">VALOR</th><th className="px-4 py-3 font-semibold">PRIORIDADE</th><th className="px-4 py-3 text-center font-semibold">STATUS</th><th className="w-12 px-2 py-3"></th></tr></thead>
                 <tbody className="divide-y divide-border/70">
                   {expenseRows.length ? expenseRows.map((t) => {
                     const cat = categories.find((item) => item.id === t.category_id);
