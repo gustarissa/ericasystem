@@ -135,6 +135,20 @@ function Index() {
     const set = transactions.filter((t) => { const td = new Date(`${t.transaction_date}T12:00:00`); return td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear(); });
     return { month: new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(d).replace(".", ""), entradas: set.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0), despesas: set.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0) };
   });
+  const incomeRows = monthTransactions.filter((t) => t.type === "income");
+  const cardRows = monthTransactions.filter((t) => t.is_card_invoice);
+  const expenseRows = monthTransactions.filter((t) => t.type === "expense" && !t.is_card_invoice);
+  const pendingCount = monthTransactions.filter((t) => !t.reconciled).length;
+  const openExpenseTotal = expenseRows.filter((t) => !t.reconciled).reduce((sum, t) => sum + Number(t.amount), 0);
+  const updatedLabel = new Intl.DateTimeFormat("pt-BR").format(new Date());
+
+  function expensePriority(transaction: Tx) {
+    const categoryName = categories.find((category) => category.id === transaction.category_id)?.name ?? "";
+    if (transaction.description.startsWith("Reserva para investimentos (") || categoryName === "Investimentos") return "IMPORTANTE";
+    if (["Moradia", "Saúde", "Alimentação", "Transporte", "Contas e serviços", "Impostos", "Educação"].includes(categoryName)) return "ESSENCIAL";
+    if (["Lazer", "Assinaturas", "Compras"].includes(categoryName)) return "NÃO ESSENCIAL";
+    return "IMPORTANTE";
+  }
 
   async function handleAuth(event: FormEvent) {
     event.preventDefault(); setAuthError("");
@@ -306,55 +320,152 @@ function Index() {
         </header>
 
         <section id="resumo" className="scroll-mt-28 pt-6">
-          <div className="mb-5 flex items-end justify-between gap-4"><div><p className="text-sm text-muted-foreground">Sua vida financeira, em ordem</p><h1 className="font-display text-3xl font-bold sm:text-4xl">Visão geral</h1></div><div className="flex items-center gap-1 rounded-xl border border-glass-border bg-glass p-1"><Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft /></Button><span className="min-w-28 text-center text-sm font-semibold capitalize">{monthLabel.format(month)}</span><Button variant="ghost" size="icon" aria-label="Próximo mês" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight /></Button></div></div>
-          <div className="grid gap-5 lg:grid-cols-4">
-            <article className="animate-rise rounded-3xl border border-glass-border bg-glass p-6 shadow-glass backdrop-blur-xl lg:col-span-2">
-              <div className="flex justify-between"><span className="text-sm font-medium text-muted-foreground">Saldo do mês</span><WalletCards className="text-primary" /></div><p className="mt-2 font-display text-4xl font-bold">{money.format(balance)}</p>
-              <div className="mt-5 grid grid-cols-2 gap-3"><Metric label="Recebido" value={income} tone="income" /><Metric label="Gasto" value={expenses} tone="expense" /></div>
-              <div className="mt-5 h-36"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--income)" stopOpacity={0.4}/><stop offset="95%" stopColor="var(--income)" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="var(--border)" vertical={false}/><XAxis dataKey="month" axisLine={false} tickLine={false} fontSize={11}/><Tooltip formatter={(v) => money.format(Number(v))}/><Area type="monotone" dataKey="entradas" stroke="var(--income)" fill="url(#incomeFill)" strokeWidth={3}/><Area type="monotone" dataKey="despesas" stroke="var(--expense)" fill="transparent" strokeWidth={2}/></AreaChart></ResponsiveContainer></div>
-            </article>
-            <article className="animate-rise rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-100 via-blue-50 to-cyan-100 p-6 shadow-glass backdrop-blur-xl [animation-delay:60ms]"><div className="flex justify-between"><span className="text-sm font-medium text-muted-foreground">Reserva do mês</span><span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary"><PiggyBank /></span></div><p className="mt-3 font-display text-3xl font-bold text-primary">{money.format(monthlyReserve)}</p><p className="mt-2 text-sm text-muted-foreground">Total separado para investimentos em {monthLabel.format(month)}.</p><div className="mt-5 rounded-2xl bg-white/70 p-4"><p className="text-xs font-medium text-muted-foreground">Proporção do que foi recebido</p><p className="mt-1 font-display text-lg font-bold">{income > 0 ? `${((monthlyReserve / income) * 100).toFixed(1).replace(".", ",")}%` : "0%"}</p></div></article>
-            <article className="animate-rise rounded-3xl border border-glass-border bg-glass p-6 shadow-glass backdrop-blur-xl [animation-delay:80ms]"><div className="flex justify-between"><span className="text-sm font-medium text-muted-foreground">Categoria com maior gasto</span><span className="rounded-full bg-expense/10 px-2.5 py-1 text-xs font-semibold text-expense">{expenses ? Math.round(((topCategory?.total ?? 0) / expenses) * 100) : 0}%</span></div><p className="mt-2 font-display text-2xl font-bold">{topCategory?.name ?? "Sem despesas"}</p><p className="font-display text-lg font-semibold text-muted-foreground">{money.format(topCategory?.total ?? 0)}</p><div className="mt-5 space-y-4">{categoryTotals.slice(0,4).map((c) => <div key={c.id}><div className="flex justify-between text-xs font-medium"><span>{c.name}</span><span className="text-muted-foreground">{money.format(c.total)}</span></div><div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-glass-strong"><div className="h-full rounded-full bg-hero" style={{ width: `${Math.max(8, (c.total / (topCategory?.total || 1)) * 100)}%` }} /></div></div>)}</div></article>
-            <article id="ia" className="animate-rise scroll-mt-28 rounded-3xl lg:col-span-4 border border-glass-border bg-glass p-6 shadow-glass backdrop-blur-xl [animation-delay:160ms]"><div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-xl bg-hero text-primary-foreground"><Sparkles /></span><p className="font-display text-sm font-bold uppercase text-primary">Insights IA</p></div><div className="mt-4 min-h-44 rounded-2xl bg-glass-strong p-4"><p className="text-sm font-semibold">Seu plano financeiro</p>{insight ? <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{insight}</p> : <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Analiso seu saldo, despesas e categorias para sugerir ajustes, reserva e caminhos de investimento compatíveis com o mês.</p>}</div><Button variant="hero" className="mt-4 w-full rounded-xl" onClick={askAI} disabled={insightLoading}>{insightLoading ? <LoaderCircle className="animate-spin" /> : <Sparkles />}Gerar plano personalizado</Button><p className="mt-3 text-[10px] text-muted-foreground">Sugestões educativas. Investimentos envolvem riscos.</p></article>
+          <div className="overflow-hidden rounded-[28px] border border-glass-border bg-glass shadow-glass backdrop-blur-xl">
+            <div className="flex flex-col gap-5 bg-primary px-6 py-7 text-primary-foreground sm:flex-row sm:items-end sm:justify-between sm:px-8">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-foreground/70">ESF • Controle financeiro pessoal</p>
+                <h1 className="mt-2 font-display text-3xl font-bold sm:text-4xl">Orçamento Pessoal {month.getFullYear()}</h1>
+                <p className="mt-1 text-sm capitalize text-primary-foreground/80">{monthLabel.format(month)} • visão consolidada do mês</p>
+              </div>
+              <div className="flex flex-col items-start gap-3 sm:items-end">
+                <p className="text-xs text-primary-foreground/70">Atualizado em {updatedLabel}</p>
+                <div className="flex items-center gap-1 rounded-xl bg-white/10 p-1">
+                  <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15 hover:text-primary-foreground" aria-label="Mês anterior" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft /></Button>
+                  <span className="min-w-32 text-center text-sm font-semibold capitalize">{monthLabel.format(month)}</span>
+                  <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/15 hover:text-primary-foreground" aria-label="Próximo mês" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight /></Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">
+              <BudgetMetric label="Entradas" value={income} helper={`${incomeRows.length} lançamento${incomeRows.length === 1 ? "" : "s"}`} tone="income" icon={<ArrowUp className="size-4"/>}/>
+              <BudgetMetric label="Saídas" value={expenses} helper={`${expenseRows.length + cardRows.length} compromisso${expenseRows.length + cardRows.length === 1 ? "" : "s"}`} tone="expense" icon={<ArrowDown className="size-4"/>}/>
+              <BudgetMetric label="Saldo projetado" value={balance} helper={balance >= 0 ? "Resultado positivo no mês" : "Saídas acima das entradas"} tone={balance >= 0 ? "income" : "expense"} icon={<WalletCards className="size-4"/>}/>
+              <BudgetMetric label="Reserva do mês" value={monthlyReserve} helper={income > 0 ? `${((monthlyReserve / income) * 100).toFixed(1).replace(".", ",")}% das entradas` : "Sem entradas no período"} tone="primary" icon={<PiggyBank className="size-4"/>}/>
+            </div>
           </div>
         </section>
 
-        <section id="movimentos" className="mt-6 scroll-mt-28 rounded-3xl border border-glass-border bg-glass p-4 shadow-glass backdrop-blur-xl sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div><h2 className="font-display text-xl font-bold">Movimentos</h2><p className="text-xs text-muted-foreground">Encontre, confira e edite entradas, despesas e faturas.</p></div>
-            <div className="grid grid-cols-3 gap-2">
-              <Button variant="glass" className="rounded-xl" onClick={() => openNewEntry("income")}><ArrowUp />Receita</Button>
-              <Button variant="glass" className="rounded-xl" onClick={() => openNewEntry("expense")}><ArrowDown />Despesa</Button>
-              <Button variant="glass" className="rounded-xl" onClick={() => openNewEntry("card")}><CreditCard />Fatura</Button>
-            </div>
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
-            <Input value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Buscar por nome, cartão ou categoria..." className="h-11 rounded-xl bg-glass-strong"/>
-            <div className="flex flex-wrap gap-2">
-              {([["all","Todos"],["income","Receitas"],["expense","Despesas"],["card","Faturas"]] as const).map(([value,label]) => <Button key={value} type="button" variant={transactionFilter === value ? "hero" : "glass"} size="sm" className="rounded-xl" onClick={() => setTransactionFilter(value)}>{label}</Button>)}
-            </div>
-          </div>
-          <div className="mt-5 divide-y divide-border">
-            {visibleTransactions.length ? visibleTransactions.map((t) => {
-              const cat = categories.find((item) => item.id === t.category_id);
-              const purchaseCount = t.is_card_invoice ? cardPurchases.filter((purchase) => purchase.transaction_id === t.id).length : 0;
-              return <div key={t.id} className="grid gap-3 py-4 sm:grid-cols-[auto_1fr_auto] sm:items-center">
-                <span className={`grid size-10 place-items-center rounded-xl ${t.type === 'income' ? 'bg-income/10 text-income' : 'bg-expense/10 text-expense'}`}>{t.is_card_invoice ? <CreditCard /> : t.type === 'income' ? <ArrowUp /> : <ArrowDown />}</span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{t.description}</p>
-                  <p className="text-xs text-muted-foreground">{cat?.name ?? 'Sem categoria'} · {new Intl.DateTimeFormat('pt-BR').format(new Date(`${t.transaction_date}T12:00:00`))}</p>
-                  {t.is_card_invoice && <Button type="button" variant="glass" size="sm" className="mt-2 h-8 rounded-lg text-xs" onClick={() => setInvoiceDetail(t)}><ReceiptText className="size-3.5"/>Ver compras ({purchaseCount})</Button>}
-                </div>
-                <div className="flex items-center justify-between gap-2 sm:justify-end">
-                  <span className={`font-display text-sm font-bold ${t.type === 'income' ? 'text-income' : 'text-expense'}`}>{t.type === 'income' ? '+' : '-'} {money.format(Number(t.amount))}</span>
-                  <Button type="button" variant="ghost" size="icon" className="size-9" aria-label={t.is_card_invoice ? `Editar fatura ${t.description}` : `Editar ${t.description}`} onClick={() => setEditingTransaction(t)}><Pencil className="size-4"/></Button>
-                </div>
-              </div>;
-            }) : <div className="py-10 text-center"><p className="font-semibold">Nenhum lançamento encontrado</p><p className="mt-1 text-sm text-muted-foreground">Tente outro filtro ou termo de busca.</p></div>}
-          </div>
-          {filteredTransactions.length > 10 && !transactionSearch.trim() && transactionFilter === "all" && <div className="mt-4 flex justify-center"><Button type="button" variant="glass" className="rounded-xl" onClick={() => setShowAllTransactions((current) => !current)}>{showAllTransactions ? "Mostrar menos" : `Ver todos (${filteredTransactions.length})`}</Button></div>}
-        </section>
+        <section id="movimentos" className="mt-6 scroll-mt-28">
+          <div className="grid gap-6 xl:grid-cols-[1.05fr_.95fr]">
+            <BudgetTableCard
+              title="Entradas do mês"
+              subtitle="Receitas previstas e já confirmadas"
+              action={<Button variant="glass" size="sm" className="rounded-xl" onClick={() => openNewEntry("income")}><Plus/>Entrada</Button>}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead><tr className="bg-primary text-primary-foreground"><th className="px-4 py-3 font-semibold">DATA</th><th className="px-4 py-3 font-semibold">DESCRIÇÃO</th><th className="px-4 py-3 text-right font-semibold">VALOR</th><th className="px-4 py-3 text-center font-semibold">STATUS</th><th className="w-12 px-2 py-3"></th></tr></thead>
+                  <tbody className="divide-y divide-border/70">
+                    {incomeRows.length ? incomeRows.map((t) => <tr key={t.id} className="bg-white/35 transition hover:bg-white/60">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(`${t.transaction_date}T12:00:00`))}</td>
+                      <td className="px-4 py-3 font-medium">{t.description}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{money.format(Number(t.amount))}</td>
+                      <td className="px-4 py-3 text-center"><StatusBadge ok={t.reconciled} okText="CONFIRMADO" pendingText="PREVISTO"/></td>
+                      <td className="px-2 py-2"><Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setEditingTransaction(t)} aria-label={`Editar ${t.description}`}><Pencil className="size-4"/></Button></td>
+                    </tr>) : <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma entrada cadastrada neste mês.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </BudgetTableCard>
 
+            <div className="grid gap-6">
+              <BudgetTableCard
+                title="Cartões"
+                subtitle="Faturas e vencimentos do mês"
+                action={<Button variant="glass" size="sm" className="rounded-xl" onClick={() => openNewEntry("card")}><Plus/>Fatura</Button>}
+              >
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-left text-sm">
+                    <thead><tr className="bg-primary text-primary-foreground"><th className="px-4 py-3 font-semibold">CARTÃO</th><th className="px-4 py-3 font-semibold">VENC.</th><th className="px-4 py-3 text-right font-semibold">TOTAL</th><th className="px-4 py-3 text-center font-semibold">STATUS</th></tr></thead>
+                    <tbody className="divide-y divide-border/70">
+                      {cardRows.length ? cardRows.map((t) => <tr key={t.id} className="bg-white/35 transition hover:bg-white/60">
+                        <td className="px-4 py-3"><button type="button" className="font-semibold hover:text-primary" onClick={() => setInvoiceDetail(t)}>{t.card_name || t.description}</button><button type="button" className="mt-1 block text-[11px] font-medium text-primary" onClick={() => setInvoiceDetail(t)}>Ver compras ({cardPurchases.filter((purchase) => purchase.transaction_id === t.id).length})</button></td>
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(`${t.transaction_date}T12:00:00`))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{money.format(Number(t.amount))}</td>
+                        <td className="px-4 py-3 text-center"><StatusBadge ok={t.reconciled} okText="PAGO" pendingText="EM ABERTO"/></td>
+                      </tr>) : <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma fatura neste mês.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </BudgetTableCard>
+
+              <article className="rounded-3xl border border-glass-border bg-glass p-5 shadow-glass backdrop-blur-xl">
+                <div className="flex items-center justify-between gap-3">
+                  <div><p className="font-display text-lg font-bold">Rotina de controle</p><p className="text-xs text-muted-foreground">Resumo rápido para acompanhar o mês</p></div>
+                  <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary"><Check className="size-5"/></span>
+                </div>
+                <div className="mt-4 grid gap-2 text-sm">
+                  <ControlRow label="Reserva para investimentos" value={money.format(monthlyReserve)} />
+                  <ControlRow label="Pendências para conciliar" value={String(pendingCount)} />
+                  <ControlRow label="Despesas ainda em aberto" value={money.format(openExpenseTotal)} />
+                  <ControlRow label="Maior categoria de gasto" value={topCategory?.name ?? "Sem despesas"} />
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <BudgetTableCard
+            className="mt-6"
+            title="Despesas e compromissos"
+            subtitle="Contas, despesas e reservas organizadas por vencimento"
+            action={<Button variant="glass" size="sm" className="rounded-xl" onClick={() => openNewEntry("expense")}><Plus/>Despesa</Button>}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead><tr className="bg-primary text-primary-foreground"><th className="px-4 py-3 font-semibold">VENC.</th><th className="px-4 py-3 font-semibold">DESPESA</th><th className="px-4 py-3 font-semibold">CATEGORIA</th><th className="px-4 py-3 text-right font-semibold">VALOR</th><th className="px-4 py-3 font-semibold">PRIORIDADE</th><th className="px-4 py-3 text-center font-semibold">STATUS</th><th className="w-12 px-2 py-3"></th></tr></thead>
+                <tbody className="divide-y divide-border/70">
+                  {expenseRows.length ? expenseRows.map((t) => {
+                    const cat = categories.find((item) => item.id === t.category_id);
+                    return <tr key={t.id} className="bg-white/35 transition hover:bg-white/60">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(`${t.transaction_date}T12:00:00`))}</td>
+                      <td className="px-4 py-3 font-medium">{t.description}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{cat?.name ?? "Sem categoria"}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{money.format(Number(t.amount))}</td>
+                      <td className="px-4 py-3"><PriorityBadge value={expensePriority(t)} /></td>
+                      <td className="px-4 py-3 text-center"><StatusBadge ok={t.reconciled} okText="PAGO" pendingText="EM ABERTO"/></td>
+                      <td className="px-2 py-2"><Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setEditingTransaction(t)} aria-label={`Editar ${t.description}`}><Pencil className="size-4"/></Button></td>
+                    </tr>;
+                  }) : <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma despesa cadastrada neste mês.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </BudgetTableCard>
+
+          <article className="mt-6 rounded-3xl border border-glass-border bg-glass p-4 shadow-glass backdrop-blur-xl sm:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div><h2 className="font-display text-xl font-bold">Gerenciar lançamentos</h2><p className="text-xs text-muted-foreground">Use busca e filtros para localizar qualquer item rapidamente.</p></div>
+              <div className="grid grid-cols-3 gap-2">
+                <Button variant="glass" className="rounded-xl" onClick={() => openNewEntry("income")}><ArrowUp />Receita</Button>
+                <Button variant="glass" className="rounded-xl" onClick={() => openNewEntry("expense")}><ArrowDown />Despesa</Button>
+                <Button variant="glass" className="rounded-xl" onClick={() => openNewEntry("card")}><CreditCard />Fatura</Button>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
+              <Input value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Buscar por nome, cartão ou categoria..." className="h-11 rounded-xl bg-glass-strong"/>
+              <div className="flex flex-wrap gap-2">{([["all","Todos"],["income","Receitas"],["expense","Despesas"],["card","Faturas"]] as const).map(([value,label]) => <Button key={value} type="button" variant={transactionFilter === value ? "hero" : "glass"} size="sm" className="rounded-xl" onClick={() => setTransactionFilter(value)}>{label}</Button>)}</div>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {visibleTransactions.length ? visibleTransactions.map((t) => {
+                const cat = categories.find((item) => item.id === t.category_id);
+                const purchaseCount = t.is_card_invoice ? cardPurchases.filter((purchase) => purchase.transaction_id === t.id).length : 0;
+                return <div key={t.id} className="grid gap-3 rounded-2xl border border-glass-border bg-white/30 p-3 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+                  <span className={`grid size-9 place-items-center rounded-xl ${t.type === "income" ? "bg-income/10 text-income" : "bg-expense/10 text-expense"}`}>{t.is_card_invoice ? <CreditCard className="size-4"/> : t.type === "income" ? <ArrowUp className="size-4"/> : <ArrowDown className="size-4"/>}</span>
+                  <div className="min-w-0"><p className="truncate text-sm font-semibold">{t.description}</p><p className="text-xs text-muted-foreground">{cat?.name ?? "Sem categoria"} • {new Intl.DateTimeFormat("pt-BR").format(new Date(`${t.transaction_date}T12:00:00`))}</p>{t.is_card_invoice && <button type="button" className="mt-1 text-xs font-semibold text-primary" onClick={() => setInvoiceDetail(t)}>Ver compras ({purchaseCount})</button>}</div>
+                  <div className="flex items-center justify-between gap-2 sm:justify-end"><span className={`font-display text-sm font-bold ${t.type === "income" ? "text-income" : "text-expense"}`}>{t.type === "income" ? "+" : "-"} {money.format(Number(t.amount))}</span><Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => setEditingTransaction(t)}><Pencil className="size-4"/></Button></div>
+                </div>;
+              }) : <p className="py-8 text-center text-sm text-muted-foreground">Nenhum lançamento encontrado.</p>}
+            </div>
+            {filteredTransactions.length > 10 && !transactionSearch.trim() && transactionFilter === "all" && <div className="mt-4 flex justify-center"><Button type="button" variant="glass" className="rounded-xl" onClick={() => setShowAllTransactions((current) => !current)}>{showAllTransactions ? "Mostrar menos" : `Ver todos (${filteredTransactions.length})`}</Button></div>}
+          </article>
+
+          <article id="ia" className="mt-6 scroll-mt-28 rounded-3xl border border-glass-border bg-glass p-6 shadow-glass backdrop-blur-xl">
+            <div className="flex items-center gap-2"><span className="grid size-9 place-items-center rounded-xl bg-hero text-primary-foreground"><Sparkles className="size-4"/></span><div><p className="font-display text-sm font-bold uppercase text-primary">Insights IA</p><p className="text-xs text-muted-foreground">Análise baseada nos dados completos do mês.</p></div></div>
+            <div className="mt-4 min-h-36 rounded-2xl bg-glass-strong p-4"><p className="text-sm font-semibold">Seu plano financeiro</p>{insight ? <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{insight}</p> : <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Analiso saldo, despesas, reservas, vencimentos, faturas e categorias para sugerir os próximos passos.</p>}</div>
+            <Button variant="hero" className="mt-4 rounded-xl" onClick={askAI} disabled={insightLoading}>{insightLoading ? <LoaderCircle className="animate-spin"/> : <Sparkles/>}Gerar plano personalizado</Button>
+            <p className="mt-3 text-[10px] text-muted-foreground">Sugestões educativas. Investimentos envolvem riscos.</p>
+          </article>
+        </section>
 
         <ReportsSection
           month={month}
@@ -550,6 +661,28 @@ function ReportStatus({ label, count, value, tone }: { label: string; count: num
 
 function ReportEmpty({ text }: { text: string }) {
   return <p className="mt-4 rounded-2xl bg-glass-strong p-4 text-center text-xs text-muted-foreground">{text}</p>;
+}
+
+function BudgetMetric({ label, value, helper, tone, icon }: { label: string; value: number; helper: string; tone: "income" | "expense" | "primary"; icon: ReactNode }) {
+  const toneClass = tone === "income" ? "text-income bg-income/10" : tone === "expense" ? "text-expense bg-expense/10" : "text-primary bg-primary/10";
+  return <article className="rounded-2xl border border-glass-border bg-white/45 p-4 shadow-sm"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><span className={`grid size-8 place-items-center rounded-lg ${toneClass}`}>{icon}</span></div><p className={`mt-3 font-display text-2xl font-bold ${tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "text-foreground"}`}>{money.format(value)}</p><p className="mt-1 text-xs text-muted-foreground">{helper}</p></article>;
+}
+
+function BudgetTableCard({ title, subtitle, action, children, className = "" }: { title: string; subtitle: string; action?: ReactNode; children: ReactNode; className?: string }) {
+  return <article className={`overflow-hidden rounded-3xl border border-glass-border bg-glass shadow-glass backdrop-blur-xl ${className}`}><div className="flex items-center justify-between gap-3 px-5 py-4"><div><h2 className="font-display text-xl font-bold">{title}</h2><p className="text-xs text-muted-foreground">{subtitle}</p></div>{action}</div>{children}</article>;
+}
+
+function StatusBadge({ ok, okText, pendingText }: { ok: boolean; okText: string; pendingText: string }) {
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide ${ok ? "bg-income/10 text-income" : "bg-warning/15 text-amber-700"}`}>{ok ? okText : pendingText}</span>;
+}
+
+function PriorityBadge({ value }: { value: string }) {
+  const className = value === "ESSENCIAL" ? "bg-primary/10 text-primary" : value === "NÃO ESSENCIAL" ? "bg-muted text-muted-foreground" : "bg-warning/15 text-amber-700";
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide ${className}`}>{value}</span>;
+}
+
+function ControlRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-center justify-between gap-4 rounded-xl bg-white/45 px-3 py-2.5"><span className="text-muted-foreground">{label}</span><span className="font-semibold">{value}</span></div>;
 }
 
 function Logo() { return <span className="grid size-11 place-items-center rounded-2xl bg-hero font-display text-lg font-bold text-primary-foreground shadow-brand">E</span>; }
