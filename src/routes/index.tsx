@@ -348,7 +348,7 @@ function Index() {
               <BudgetMetric label="Entradas" value={income} helper={`${incomeRows.length} lançamento${incomeRows.length === 1 ? "" : "s"}`} tone="income" icon={<ArrowUp className="size-4"/>}/>
               <BudgetMetric label="Saídas" value={expenses} helper={`${expenseRows.length + cardRows.length} compromisso${expenseRows.length + cardRows.length === 1 ? "" : "s"}`} tone="expense" icon={<ArrowDown className="size-4"/>}/>
               <BudgetMetric label="Saldo projetado" value={balance} helper={balance >= 0 ? "Resultado positivo no mês" : "Saídas acima das entradas"} tone={balance >= 0 ? "income" : "expense"} icon={<WalletCards className="size-4"/>}/>
-              <BudgetMetric label="Reserva do mês" value={monthlyReserve} helper={income > 0 ? `${((monthlyReserve / income) * 100).toFixed(1).replace(".", ",")}% das entradas` : "Sem entradas no período"} tone="primary" icon={<PiggyBank className="size-4"/>}/>
+              <BudgetMetric label="Investimentos" value={monthlyReserve} helper={income > 0 ? `${((monthlyReserve / income) * 100).toFixed(1).replace(".", ",")}% das entradas` : "Sem entradas no período"} tone="primary" icon={<PiggyBank className="size-4"/>}/>
             </div>
           </div>
         </section>
